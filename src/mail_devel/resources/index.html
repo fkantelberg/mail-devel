@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mail-devel</title>
+  <script type="text/javascript" src="/main.js"></script>
+  <link type="text/css" rel="stylesheet" href="/main.css"/>
+</head>
+
+<body>
+  <div id="wrapper">
+    <div id="nav" class="container">
+      <div id="logo">mail<span class="highlight">devel</span></div>
+
+      <select id="mailboxes" name="mailboxes" multiple="multiple">
+      </select>
+    </div>
+
+    <div id="mailbox" class="container">
+      <table>
+        <thead>
+          <tr>
+            <th id="mailbox-from">From</th>
+            <th id="mailbox-to">To</th>
+            <th id="mailbox-subject">Subject</th>
+            <th id="mailbox-date">Date</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <table id="header">
+      <tr id="header-from">
+        <th>From:</th>
+        <td><input type="text" readonly="readonly"/></td>
+      </tr>
+      <tr id="header-to">
+        <th>To:</th>
+        <td><input type="text" readonly="readonly"/></td>
+      </tr>
+      <tr id="header-cc">
+        <th>CC:</th>
+        <td><input type="text" readonly="readonly"/></td>
+      </tr>
+      <tr id="header-bcc">
+        <th>BCC:</th>
+        <td><input type="text" readonly="readonly"/></td>
+      </tr>
+      <tr id="header-subject">
+        <th>Subject:</th>
+        <td><input type="text" readonly="readonly"/></td>
+      </tr>
+      <tr id="header-button">
+        <th></th>
+        <td>
+          <button id="btn-html" type="button">Show HTML</button>
+          <button id="btn-plain" type="button">Show Plain</button>
+          <button id="btn-source" type="button">Show Source</button>
+          <button id="btn-seen" type="button">Seen</button>
+          <button id="btn-unseen" type="button">Unseen</button>
+          <div id="btn-dropdown">
+            <button type="button">Attachments</button>
+            <div></div>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <div id="content" class="container">
+      <iframe id="html"></iframe>
+      <textarea id="plain" readonly="readonly"></textarea>
+      <textarea id="source" readonly="readonly"></textarea>
+    </div>
+  </div>
+
+  <script>
+    const client = new MailClient();
+    client.initialize();
+  </script>
+</body>
+</html>

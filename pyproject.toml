@@ -1,0 +1,37 @@
+[build-system]
+requires = [ "setuptools >= 35.0.2", "wheel >= 0.29.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py37', 'py38', 'py39', 'py310']
+include = '(\.pyi?$|src|tests)'
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+envlist = clean,py3,report
+
+[testenv]
+deps = pytest
+       pytest-asyncio
+       pytest-cov
+       pytest-timeout
+       coverage
+depends:
+    py3: clean
+    report: py3
+commands = pytest --cov {envsitepackagesdir}/mail_devel --asyncio-mode=auto --cov-append --timeout 5
+
+[testenv:report]
+skip_install = true
+deps = coverage
+commands =
+  coverage html
+  coverage report --fail-under=80
+
+[testenv:clean]
+skip_install = true
+deps = coverage
+commands = coverage erase
+"""

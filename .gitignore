@@ -1,0 +1,10 @@
+*.egg-info
+*.log
+.coverage
+.pytest_cache
+.tox/
+__pycache__/
+build/
+dist/
+htmlcov
+pki/

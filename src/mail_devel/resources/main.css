@@ -1,0 +1,140 @@
+:root {
+  --back: #333;
+  --border: gray;
+  --primary: #ccc;
+  --secondary: #999;
+  --highlight: #555;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --back: white;
+    --border: gray;
+    --primary: black;
+    --secondary: #333;
+    --highlight: lightgray;
+  }
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body, input, select, textarea, table {
+  background-color: var(--back);
+  color: var(--primary);
+}
+
+#wrapper {
+  display: grid;
+  height: 100%;
+  grid-template-areas: "nav mailbox" "nav header" "nav content";
+  grid-template-columns: 200px auto;
+  grid-template-rows: 30% 150px auto;
+}
+
+*:focus-visible {outline: none}
+.hidden {display: none}
+.highlight {color: #469}
+.selected {background-color: var(--highlight)}
+.unseen {font-weight: bold}
+
+#content {grid-area: content}
+#mailbox {grid-area: mailbox}
+#nav {
+  display: flex;
+  flex-direction: column;
+  grid-area: nav;
+}
+
+#mailboxes {
+  display: block;
+  flex: 1;
+  font-size: 15pt;
+  height: 80%;
+  width: 100%;
+}
+#mailboxes option {padding: 5px}
+
+#mailbox table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+#mailbox table tr:hover {background-color: var(--highlight)}
+#mailbox table th, #mailbox table td {
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#mailbox #mailbox-from, #mailbox #mailbox-to {max-width: 150px; width: 15%}
+#mailbox #mailbox-date {width: 170px}
+#mailbox #mailbox-flags {width: 10%}
+
+#mailbox table th {
+  border: 1px solid gray;
+  background-color: var(--highlight);
+}
+
+#mailbox table td {border: 1px solid var(--border)}
+
+#logo {
+  font-family: monospace;
+  font-size: 20pt;
+  padding: 5% 0;
+  text-align: center;
+}
+
+#header {
+  background-color: var(--highlight);
+  border-bottom: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+}
+#header th {
+  text-align: right;
+  width: 100px;
+}
+#header #header-button td {text-align: right}
+#header button {margin-right: 5px}
+#header td {position: relative;}
+#header input {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 0;
+}
+
+#content {height: 100%; overflow: hidden}
+#content textarea, #content iframe {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  resize: none;
+  width: 100%;
+}
+#content textarea {box-sizing: border-box; padding: 5px}
+
+#btn-dropdown button {
+  cursor: pointer;
+}
+#btn-dropdown {
+  position: relative;
+  display: inline-block;
+}
+#btn-dropdown div {
+  background-color: var(--secondary);
+  display: none;
+  min-width: 150px;
+  position: absolute;
+  right: 5px;
+}
+#btn-dropdown a {
+  display: block;
+  margin: 3px;
+  text-align: center;
+}
+#btn-dropdown:hover div {display: block}
+#btn-dropdown a:hover {background: var(--highlight)}
