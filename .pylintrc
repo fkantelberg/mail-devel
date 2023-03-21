@@ -29,6 +29,7 @@ disable=raw-checker-failed,
         redefined-outer-name,
         bad-mcs-classmethod-argument,
         too-few-public-methods,
+        too-many-statements,
         logging-fstring-interpolation,
 
 [IMPORTS]

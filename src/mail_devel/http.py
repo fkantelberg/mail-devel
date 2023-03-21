@@ -62,6 +62,7 @@ class Frontend:
                     r"/api/{mailbox}/{uid:\d+}/attachment/{attachment}",
                     self._api_attachment,
                 ),
+                web.get(r"/api/{mailbox}/{uid:\d+}/flags", self._api_flag),
                 web.put(r"/api/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag),
                 web.delete(r"/api/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag),
             ]
@@ -201,22 +202,24 @@ class Frontend:
     async def _api_flag(self, request: Request) -> Response:
         try:
             name = request.match_info["mailbox"]
-            uid = int(request.match_info["uid"])
-            flag = request.match_info["flag"].title()
             mailbox = await self.mailbox_set.get_mailbox(name)
+            uid = int(request.match_info["uid"])
+
+            if request.method in ("DELETE", "PUT"):
+                flag = request.match_info["flag"].title()
+                flag = Flag(b"\\" + flag.encode())
+            else:
+                flag = None
         except (IndexError, KeyError) as e:
             raise web.HTTPNotFound() from e
 
-        remove = request.method == "DELETE"
-
-        flag = Flag(b"\\" + flag.encode())
         async for msg in mailbox.messages():
             if msg.uid != uid:
                 continue
 
-            if remove:
+            if request.method == "DELETE":
                 msg.permanent_flags = msg.permanent_flags.difference([flag])
-            else:
+            elif request.method == "PUT":
                 msg.permanent_flags = msg.permanent_flags.union([flag])
 
             return web.json_response(flags_to_api(msg.permanent_flags))

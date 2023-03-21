@@ -3,6 +3,7 @@ import ssl
 import subprocess
 
 import pytest
+
 from mail_devel import utils
 
 CA_CERT = "pki/ca.pem"
