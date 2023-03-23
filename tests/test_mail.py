@@ -3,11 +3,13 @@ import asyncio
 from random import randint
 from secrets import token_hex
 from smtplib import SMTP, SMTPAuthenticationError
+from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
 
 from mail_devel import Service
+from mail_devel import __main__ as main
 
 MAIL = """
 Content-Type: multipart/mixed; boundary="------------6S5GIA0a7bmD9z4YzFLV1oIL"
@@ -178,3 +180,22 @@ async def test_mail_devel_smtp_auth():
             "localhost", port=port
         ) as smtp:
             smtp.login("invalid", pw)
+
+
+@pytest.mark.asyncio
+async def test_main_sleep_forever():
+    with patch("asyncio.sleep", autospec=True) as mock:
+        mock.side_effect = [None] * 10 + [GeneratorExit()]
+        with pytest.raises(GeneratorExit):
+            await main.sleep_forever()
+        assert mock.call_count == 11  # 10 calls + GeneratorExit
+
+
+@pytest.mark.asyncio
+async def test_main():
+    pw = token_hex(10)
+    args = ["--host", "127.0.0.1", "--user", "test", "--password", pw]
+    args = Service.parse(args)
+    with patch("mail_devel.__main__.sleep_forever", autospec=True) as mock:
+        await main.run(args)
+        mock.assert_called_once()

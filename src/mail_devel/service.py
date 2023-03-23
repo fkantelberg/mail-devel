@@ -113,6 +113,10 @@ class Service:
 
     @asynccontextmanager
     async def start(self) -> None:
+        loop = asyncio.get_event_loop()
+        if self.frontend:
+            loop.create_task(self.frontend.start())
+
         async with AsyncExitStack() as stack:
             await self.backend.start(stack)
             await self.imap.start(stack)
@@ -120,9 +124,6 @@ class Service:
             self.smtp.start()
             if self.smtps:
                 self.smtps.start()
-
-            if self.frontend:
-                asyncio.create_task(self.frontend.start())
 
             self.log_connection_info()
             yield

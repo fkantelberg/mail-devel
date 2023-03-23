@@ -18,7 +18,7 @@ original_func = SearchKey.__init__
 
 def patched_searchkey(self, key, filter_=None, inverse=False):
     if isinstance(filter_, list):
-        filter_ = frozenset(filter_)
+        filter_ = tuple(filter_)
     return original_func(self, key, filter_, inverse)
 
 
@@ -33,7 +33,7 @@ async def sleep_forever() -> None:
 
 async def run(args: Namespace) -> None:
     loop = asyncio.get_event_loop()
-    service = Service.init(args)
+    service = await Service.init(args)
     async with service.start():
         forever = asyncio.create_task(sleep_forever())
         loop.add_signal_handler(signal.SIGINT, forever.cancel)

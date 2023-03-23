@@ -68,7 +68,7 @@ class Frontend:
             ]
         )
 
-        await web._run_app(
+        return await web._run_app(
             self.api,
             host=self.host,
             port=self.port,
@@ -85,6 +85,7 @@ class Frontend:
                 content_type="text/html",
             )
         except FileNotFoundError as e:
+            _logger.error("File 'index.html' not in resources")
             raise web.HTTPNotFound() from e
 
     async def _page_static(self, request: Request) -> Response:
@@ -99,6 +100,7 @@ class Frontend:
         try:
             return Response(body=self.load_resource(static), content_type=mimetype)
         except FileNotFoundError as e:
+            _logger.error(f"File {static!r} not in resources")
             raise web.HTTPNotFound() from e
 
     async def _convert_message(self, msg: Message, full: bool = False) -> dict:
