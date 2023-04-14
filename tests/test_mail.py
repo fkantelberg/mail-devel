@@ -87,6 +87,10 @@ async def test_mail_devel_http():
     mailbox = await service.mailbox_set.get_mailbox("INBOX")
     await service.mailbox_set.get_mailbox("SENT")
 
+    assert service.frontend.load_resource("index.html")
+    assert service.frontend.load_resource("main.css")
+    assert service.frontend.load_resource("main.js")
+
     async with service.start():
         await asyncio.sleep(0.1)
 
