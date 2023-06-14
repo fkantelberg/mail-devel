@@ -27,6 +27,7 @@ async def imap_context(args: argparse.Namespace) -> argparse.Namespace:
         debug=args.debug,
         cert=args.cert,
         key=args.key,
+        passlib_cfg=None,
         tls=False,
         proxy_protocol=None,
         inherited_sockets=None,
