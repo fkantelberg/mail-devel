@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
+
 from mail_devel import Service
 from mail_devel import __main__ as main
 
