@@ -1,12 +1,16 @@
 import logging
 import sys
+import uuid
+from datetime import datetime
 from email import message_from_bytes
+from email.message import EmailMessage
 from importlib import resources
 
 from aiohttp import web
 from aiohttp.web import Request, Response
 from pymap.backend.dict import MailboxSet
 from pymap.backend.dict.mailbox import Message
+from pymap.parsing.message import AppendMessage
 from pymap.parsing.specials.flag import Flag
 
 _logger = logging.getLogger(__name__)
@@ -20,14 +24,18 @@ class Frontend:
     def __init__(
         self,
         mailbox_set: MailboxSet,
+        user: str,
         host: str = "",
         port: int = 8080,
         devel: bool = False,
+        flagged_seen: bool = False,
     ):
         self.mailbox_set = mailbox_set
         self.api = None
         self.devel = devel
         self.host, self.port = host, port
+        self.user = user
+        self.flagged_seen = flagged_seen
 
     def load_resource(self, resource: str) -> str:
         if self.devel:
@@ -55,9 +63,11 @@ class Frontend:
             [
                 web.get("/", self._page_index),
                 web.get(r"/{static:.*\.(css|js)}", self._page_static),
+                web.post(r"/api", self._api_post),
                 web.get(r"/api", self._api_index),
                 web.get(r"/api/{mailbox}", self._api_mailbox),
                 web.get(r"/api/{mailbox}/{uid:\d+}", self._api_message),
+                web.get(r"/api/{mailbox}/{uid:\d+}/reply", self._api_reply),
                 web.get(
                     r"/api/{mailbox}/{uid:\d+}/attachment/{attachment}",
                     self._api_attachment,
@@ -129,7 +139,7 @@ class Frontend:
                     result["body_plain"] = part.get_payload(decode=True).decode()
                 elif ctype == "text/html":
                     result["body_html"] = part.get_payload(decode=True).decode()
-        elif part.get_content_type() == "text/html":
+        elif message.get_content_type() == "text/html":
             result["body_html"] = message.get_payload(decode=True).decode()
         else:
             result["body_plain"] = message.get_payload(decode=True).decode()
@@ -140,6 +150,32 @@ class Frontend:
     async def _api_index(self, request: Request) -> Response:  # pylint: disable=W0613
         mailboxes = await self.mailbox_set.list_mailboxes()
         return web.json_response([e.name for e in mailboxes.list()])
+
+    async def _api_post(self, request: Request) -> Response:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise web.HTTPBadRequest()
+
+        header, body = map(data.get, ("header", "body"))
+        if not isinstance(header, dict) or not isinstance(body, str):
+            raise web.HTTPBadRequest()
+
+        message = EmailMessage()
+        for key, value in header.items():
+            if key.strip() and value.strip():
+                message.add_header(key.title(), value)
+
+        message.set_content(body)
+
+        mailbox = await self.mailbox_set.get_mailbox("INBOX")
+        await mailbox.append(
+            AppendMessage(
+                literal=str(message).encode(),
+                when=datetime.now(),
+                flag_set=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+            )
+        )
+        return web.json_response({"status": "ok"})
 
     async def _api_mailbox(self, request: Request) -> Response:
         try:
@@ -164,6 +200,34 @@ class Frontend:
         async for msg in mailbox.messages():
             if msg.uid == uid:
                 return web.json_response(await self._convert_message(msg, True))
+
+        raise web.HTTPNotFound()
+
+    async def _api_reply(self, request: Request) -> Response:
+        try:
+            name = request.match_info["mailbox"]
+            uid = int(request.match_info["uid"])
+            mailbox = await self.mailbox_set.get_mailbox(name)
+        except (IndexError, KeyError) as e:
+            raise web.HTTPNotFound() from e
+
+        async for msg in mailbox.messages():
+            if msg.uid == uid:
+                message = await self._convert_message(msg, True)
+                headers = message["header"]
+                headers["subject"] = f"RE: {headers['subject']}"
+                msg_id = headers.get("message-id", None)
+                if msg_id:
+                    headers["in-reply-to"] = msg_id
+                    headers["references"] = f"{msg_id} {headers.get('references', '')}"
+                headers["message-id"] = f"{uuid.uuid4()}@mail-devel"
+                headers["to"] = headers["from"]
+                headers["from"] = self.user
+                headers.pop("content-type", None)
+                for key in list(headers):
+                    if key.startswith("x-"):
+                        headers.pop(key, None)
+                return web.json_response(message)
 
         raise web.HTTPNotFound()
 

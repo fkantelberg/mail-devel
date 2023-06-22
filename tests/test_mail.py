@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
-
 from mail_devel import Service
 from mail_devel import __main__ as main
 
@@ -124,6 +123,21 @@ async def test_mail_devel_http():
                 msg = await response.json()
                 assert msg
                 assert msg["attachments"]
+
+            async with session.get("/api/INBOX/101/reply") as response:
+                assert response.status == 200
+                msg = await response.json()
+                assert msg["header"]["to"] == "test <test@example.org>"
+                assert msg["header"]["message-id"].endswith("@mail-devel")
+
+            msg["body"] = "hello"
+            async with session.post("/api", json=msg) as response:
+                assert response.status == 200
+
+            async with session.get("/api/INBOX") as response:
+                assert response.status == 200
+                mbox = await response.json()
+                assert len(mbox) == 2
 
             async with session.get("/api/INBOX/101/attachment/att abc.txt") as response:
                 assert response.status == 200

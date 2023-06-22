@@ -8,7 +8,7 @@ This tool combines an in-memory SMTP mail-sink with an IMAP server. All mails co
 are stored in the IMAP inbox. This can be used to test outgoing and incoming mail configurations.
 Built on top of [aiosmtpd](https://github.com/aio-libs/aiosmtpd) and [pymap](https://github.com/icgood/pymap/).
 
-The frontend is minimally showing the content of the mailbox. Please connect a proper mail client
+The frontend is minimally handling the content of the mailbox. Please connect a proper mail client
 like Thunderbird for more advanced usage.
 
 DO NOT USE FOR PRODUCTION.

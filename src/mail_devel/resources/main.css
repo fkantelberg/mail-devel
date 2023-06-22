@@ -21,9 +21,13 @@ html, body {
   margin: 0;
 }
 
-body, input, select, textarea, table {
+body, input, select, textarea, table, #editor {
   background-color: var(--back);
   color: var(--primary);
+}
+
+button {
+  text-transform: capitalize;
 }
 
 #wrapper {
@@ -35,7 +39,7 @@ body, input, select, textarea, table {
 }
 
 *:focus-visible {outline: none}
-.hidden {display: none}
+.hidden {display: none !important}
 .highlight {color: #469}
 .selected {background-color: var(--highlight)}
 .unseen {font-weight: bold}
@@ -87,27 +91,28 @@ body, input, select, textarea, table {
   text-align: center;
 }
 
-#header {
+.header {
   background-color: var(--highlight);
   border-bottom: 2px solid var(--border);
   border-top: 2px solid var(--border);
 }
-#header th {
+.header th {
   text-align: right;
   width: 100px;
 }
-#header #header-button td {text-align: right}
-#header button {margin-right: 5px}
-#header td {position: relative;}
-#header input {
+.header .buttons td {text-align: right}
+.header td {position: relative;}
+.header input {
   position: absolute;
   left: 5px;
   right: 5px;
   top: 0;
 }
 
-#content {height: 100%; overflow: hidden}
-#content textarea, #content iframe {
+.buttons button {margin-right: 5px}
+
+.container {height: 100%; overflow: hidden}
+.container textarea, .container iframe {
   border: 0;
   margin: 0;
   padding: 0;
@@ -115,7 +120,7 @@ body, input, select, textarea, table {
   resize: none;
   width: 100%;
 }
-#content textarea {box-sizing: border-box; padding: 5px}
+.container textarea {box-sizing: border-box; padding: 5px}
 
 #btn-dropdown button {
   cursor: pointer;
@@ -138,3 +143,44 @@ body, input, select, textarea, table {
 }
 #btn-dropdown:hover div {display: block}
 #btn-dropdown a:hover {background: var(--highlight)}
+
+#editor {
+  display: grid;
+  z-index: 1000;
+  position: fixed;
+  border: 2px solid var(--border);
+  top: 150px;
+  left: 150px;
+  bottom: 150px;
+  right: 150px;
+  grid-template-rows: max-content max-content auto;
+}
+
+#editor-content {
+  display: block;
+  height: 100%;
+}
+#editor-header {
+  display: block;
+  max-height: 200px;
+  overflow-y: scroll;
+  padding: 3px;
+}
+#editor-header th {
+  position: relative;
+  min-width: 150px;
+}
+#editor-header .delete {
+  content: "&#128465;";
+}
+#editor-buttons {
+  background-color: var(--highlight);
+  text-align: right;
+  padding: 3px;
+}
+#editor-header td {width: 100%}
+#editor-header .control {
+  min-width: 20px;
+}
+
+

@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+import secrets
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import List, TypeVar
 
@@ -105,9 +106,11 @@ class Service:
         if args.http:
             service.frontend = Frontend(
                 service.mailbox_set,
+                user=args.user,
                 host=args.http_host or args.host,
                 port=args.http_port,
                 devel=args.devel,
+                flagged_seen=args.flagged_seen,
             )
 
         return service
@@ -135,17 +138,26 @@ class Service:
         parser.add_argument(
             "--host",
             default=os.environ.get("MAIL_HOST", ""),
-            help="The IP to bind the listening server ports. Default is %(default)s",
+            help="The IP to bind the listening server ports. Can also be set using "
+            "the environment variable MAIL_HOST. Default is %(default)s",
         )
         parser.add_argument(
             "--user",
             default=os.environ.get("MAIL_USER", "test@example.org"),
-            help="The user account for SMTP and IMAP. Default is %(default)s",
+            help="The user account for SMTP and IMAP. Can also be set using "
+            "the environment variable MAIL_USER. Default is %(default)s",
         )
         pw = parser.add_argument(
             "--password",
             default=os.environ.get("MAIL_PASSWORD"),
-            help="The password for SMTP and IMAP",
+            help="The password for SMTP and IMAP. Can also be set using the "
+            "environment variable MAIL_PASSWORD",
+        )
+        parser.add_argument(
+            "--gen-password",
+            default=False,
+            action="store_true",
+            help="Generate the SMTP and IMAP password and print at start",
         )
 
         group = parser.add_argument_group("IMAP")
@@ -246,6 +258,8 @@ class Service:
         )
 
         args = parser.parse_args(args)
+        if args.gen_password:
+            args.password = secrets.token_hex(16)
         if not args.password:
             raise argparse.ArgumentError(pw, "Missing argument `password`")
         return args

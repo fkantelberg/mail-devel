@@ -14,6 +14,7 @@
     <div id="nav" class="container">
       <div id="logo">mail<span class="highlight">devel</span></div>
 
+      <button id="btn-new" type="button">Send Mail</button>
       <select id="mailboxes" name="mailboxes" multiple="multiple">
       </select>
     </div>
@@ -32,7 +33,7 @@
       </table>
     </div>
 
-    <table id="header">
+    <table id="header" class="header">
       <tr id="header-from">
         <th>From:</th>
         <td><input type="text" readonly="readonly"/></td>
@@ -53,9 +54,10 @@
         <th>Subject:</th>
         <td><input type="text" readonly="readonly"/></td>
       </tr>
-      <tr id="header-button">
+      <tr id="header-button" class="buttons">
         <th></th>
         <td>
+          <button id="btn-reply" type="button">Reply</button>
           <button id="btn-html" type="button">Show HTML</button>
           <button id="btn-plain" type="button">Show Plain</button>
           <button id="btn-source" type="button">Show Source</button>
@@ -73,6 +75,46 @@
       <iframe id="html"></iframe>
       <textarea id="plain" readonly="readonly"></textarea>
       <textarea id="source" readonly="readonly"></textarea>
+    </div>
+  </div>
+
+  <div id="editor" class="hidden">
+    <div id="editor-buttons" class="buttons">
+      <button id="btn-send">Send</button>
+      <button id="btn-add-header">Add Header</button>
+      <button id="btn-advanced"></button>
+      <button id="btn-cancel">Cancel</button>
+    </div>
+
+    <table id="editor-header" class="header">
+      <tr id="editor-from">
+        <th>From:</th>
+        <td><input type="text"/></td>
+        <td class="control"></td>
+      </tr>
+      <tr id="editor-to">
+        <th>To:</th>
+        <td><input type="text"/></td>
+        <td class="control"></td>
+      </tr>
+      <tr id="editor-cc">
+        <th>CC:</th>
+        <td><input type="text"/></td>
+        <td class="control"></td>
+      </tr>
+      <tr id="editor-bcc">
+        <th>BCC:</th>
+        <td><input type="text"/></td>
+        <td class="control"></td>
+      </tr>
+      <tr id="editor-subject">
+        <th>Subject:</th>
+        <td><input type="text"/></td>
+        <td class="control"></td>
+      </tr>
+    </table>
+    <div id="editor-content" class="container">
+      <textarea></textarea>
     </div>
   </div>
 
