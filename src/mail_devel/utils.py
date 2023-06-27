@@ -2,7 +2,6 @@ import logging
 import os
 import ssl
 import sys
-from typing import List
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"
@@ -19,32 +18,34 @@ LOG_LEVELS = {
 _logger = logging.getLogger(__name__)
 
 
-def configure_logging(level: str, log_file: str = None) -> None:
+def configure_logging(level_name: str, log_file: str | None = None) -> None:
     """Configure the logging"""
-    level = LOG_LEVELS.get(level.lower(), logging.DEBUG)
+    level = LOG_LEVELS.get(level_name.lower(), logging.DEBUG)
 
     log = logging.getLogger()
     log.setLevel(level)
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter(LOG_FORMAT, style="{"))
-    log.addHandler(handler)
+    formatter = logging.Formatter(LOG_FORMAT, style="{")
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setFormatter(formatter)
+    log.addHandler(stream_handler)
 
     if log_file:
-        handler = logging.FileHandler(log_file)
-        handler.setLevel(logging.DEBUG)
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, style="{"))
-        log.addHandler(handler)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        log.addHandler(file_handler)
 
 
 def generate_ssl_context(
     *,
-    cert: str = None,
-    key: str = None,
-    ca: str = None,
-    crl: str = None,
-    ciphers: List[str] = None,
+    cert: str | None = None,
+    key: str | None = None,
+    ca: str | None = None,
+    crl: str | None = None,
+    ciphers: str | None = None,
     check_hostname: bool = False,
 ) -> ssl.SSLContext:
     """Generate a SSL context for the tunnel"""
@@ -83,8 +84,8 @@ def generate_ssl_context(
     # pylint: disable=no-member
     _logger.info("Minimal TLS Version: %s", ctx.minimum_version.name)
 
-    ciphers = sorted(c["name"] for c in ctx.get_ciphers())
-    _logger.info("Ciphers: %s", ", ".join(ciphers))
+    avail_ciphers = sorted(c["name"] for c in ctx.get_ciphers())
+    _logger.info("Ciphers: %s", ", ".join(avail_ciphers))
 
     return ctx
 

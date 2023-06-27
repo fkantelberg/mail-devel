@@ -3,17 +3,23 @@ import asyncio
 import logging
 import os
 import secrets
+import ssl
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import List, TypeVar
+from typing import AsyncGenerator
 
 from aiosmtpd.controller import Controller
 from pymap.backend.dict import DictBackend, FilterSet
-from pymap.imap import IMAPService
+from pymap.imap import IMAPConfig, IMAPService
 
 from . import utils
 from .http import Frontend
 from .mailbox import TestMailboxSet
 from .smtp import Authenticator, MemoryHandler
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 _logger = logging.getLogger(__name__)
 
@@ -37,11 +43,17 @@ async def imap_context(args: argparse.Namespace) -> argparse.Namespace:
 
 class Service:
     def __init__(self, args: argparse.Namespace):
-        self.args = args
-        self.imap = self.smtp = self.smtps = self.frontend = None
-        self.backend = self.config = None
-        self.handler = self.mailbox_set = self.filter_set = None
-        self.ssl_context = None
+        self.args: argparse.Namespace = args
+        self.imap: IMAPService | None = None
+        self.smtp: Controller | None = None
+        self.smtps: Controller | None = None
+        self.frontend: Frontend | None = None
+        self.backend: DictBackend | None = None
+        self.config: IMAPConfig | None = None
+        self.handler: MemoryHandler | None = None
+        self.mailbox_set: TestMailboxSet | None = None
+        self.filter_set: FilterSet | None = None
+        self.ssl_context: ssl.SSLContext | None = None
 
     def log_connection_info(self) -> None:
         tls = bool(self.args.cert and self.args.key)
@@ -59,7 +71,7 @@ class Service:
             _logger.info(f"SMTPS service [{self.args.smtps_port}]")
 
     @classmethod
-    async def init(cls, args: argparse.Namespace) -> TypeVar("Service"):
+    async def init(cls, args: argparse.Namespace) -> Self:
         service = cls(args)
 
         if args.cert and args.key:
@@ -116,7 +128,7 @@ class Service:
         return service
 
     @asynccontextmanager
-    async def start(self) -> None:
+    async def start(self) -> AsyncGenerator:
         loop = asyncio.get_event_loop()
         if self.frontend:
             loop.create_task(self.frontend.start())
@@ -133,7 +145,7 @@ class Service:
             yield
 
     @classmethod
-    def parse(cls, args: List[str] = None) -> argparse.ArgumentParser:
+    def parse(cls, args: list[str] | None = None) -> argparse.Namespace:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--host",
@@ -169,8 +181,9 @@ class Service:
         group.add_argument(
             "--imap-port",
             metavar="PORT",
-            default=4143,
-            help="The port of the IMAP interface. Default is %(default)s",
+            default=int(os.environ.get("MAIL_IMAP_PORT", 4143)),
+            help="The port of the IMAP interface. Can also be set using the "
+            "environment variable MAIL_IMAP_PORT. Default is %(default)s",
         )
 
         group = parser.add_argument_group("HTTP")
@@ -182,8 +195,9 @@ class Service:
         group.add_argument(
             "--http-port",
             metavar="PORT",
-            default=4080,
-            help="The port of the HTTP interface. Default is %(default)s",
+            default=int(os.environ.get("MAIL_HTTP_PORT", 4080)),
+            help="The port of the HTTP interface. Can also be set using the "
+            "environment variable MAIL_HTTP_PORT. Default is %(default)s",
         )
         group.add_argument(
             "--no-http",
@@ -201,14 +215,16 @@ class Service:
         group.add_argument(
             "--smtp-port",
             metavar="PORT",
-            default=4025,
-            help="The port of the SMTP interface. Default is %(default)s",
+            default=int(os.environ.get("MAIL_SMTP_PORT", 4025)),
+            help="The port of the SMTP interface. Can also be set using the "
+            "environment variable MAIL_SMTP_PORT. Default is %(default)s",
         )
         group.add_argument(
             "--smtps-port",
             metavar="PORT",
-            default=4465,
-            help="The port of the SMTPS interface. Requires --cert and --key. "
+            default=int(os.environ.get("MAIL_SMTPS_PORT", 4465)),
+            help="The port of the SMTPS interface. Can also be set using the "
+            "environment variable MAIL_SMTPS_PORT. Requires --cert and --key. "
             "Default is %(default)s",
         )
         group.add_argument(
@@ -257,9 +273,9 @@ class Service:
             help="TLS key file",
         )
 
-        args = parser.parse_args(args)
-        if args.gen_password:
-            args.password = secrets.token_hex(16)
-        if not args.password:
+        parsed = parser.parse_args(args)
+        if parsed.gen_password:
+            parsed.password = secrets.token_hex(16)
+        if not parsed.password:
             raise argparse.ArgumentError(pw, "Missing argument `password`")
-        return args
+        return parsed

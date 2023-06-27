@@ -4,5 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 88
-target-version = ['py37', 'py38', 'py39', 'py310']
+target-version = ['py37', 'py38', 'py39', 'py310', 'py311']
 include = '(\.pyi?$|src|tests)'
+
+[tool.mypy]
+disable_error_code = 'attr-defined,import,union-attr'

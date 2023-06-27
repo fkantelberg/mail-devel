@@ -101,12 +101,12 @@ button {
   width: 100px;
 }
 .header .buttons td {text-align: right}
-.header td {position: relative;}
 .header input {
-  position: absolute;
-  left: 5px;
-  right: 5px;
-  top: 0;
+  box-sizing: border-box;
+  width: 100%;
+  width: -moz-available;
+  width: -webkit-fill-available;
+  width: fill-available;
 }
 
 .buttons button {margin-right: 5px}

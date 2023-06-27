@@ -24,17 +24,6 @@ if sys.version_info[:2] == (3, 10):
 
     SearchKey.__init__ = patched_searchkey
 
-# Manual patch for https://github.com/icgood/pymap/issues/158 for py3.11
-if sys.version_info[:2] == (3, 11):
-    original_func = SearchKey._get_filter
-
-    def patched_get_filter(self, cls):
-        if cls == frozenset:
-            cls = tuple
-        return original_func(self, cls)
-
-    SearchKey._get_filter = patched_get_filter
-
 
 async def sleep_forever() -> None:
     with suppress(asyncio.CancelledError):
@@ -55,7 +44,7 @@ async def run(args: Namespace) -> None:
 def main() -> None:
     args = Service.parse()
 
-    utils.configure_logging(level="DEBUG" if args.debug else "INFO")
+    utils.configure_logging("DEBUG" if args.debug else "INFO")
     asyncio.run(run(args))
 
 

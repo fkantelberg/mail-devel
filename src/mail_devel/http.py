@@ -11,6 +11,7 @@ from aiohttp.web import Request, Response
 from pymap.backend.dict import MailboxSet
 from pymap.backend.dict.mailbox import Message
 from pymap.parsing.message import AppendMessage
+from pymap.parsing.specials import FetchRequirement
 from pymap.parsing.specials.flag import Flag
 
 _logger = logging.getLogger(__name__)
@@ -30,12 +31,13 @@ class Frontend:
         devel: bool = False,
         flagged_seen: bool = False,
     ):
-        self.mailbox_set = mailbox_set
-        self.api = None
-        self.devel = devel
-        self.host, self.port = host, port
-        self.user = user
-        self.flagged_seen = flagged_seen
+        self.mailbox_set: MailboxSet = mailbox_set
+        self.api: web.Application | None = None
+        self.host: str = host
+        self.port: int = port
+        self.user: str = user
+        self.devel: bool = devel
+        self.flagged_seen: bool = flagged_seen
 
     def load_resource(self, resource: str) -> str:
         if self.devel:
@@ -85,7 +87,7 @@ class Frontend:
             access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
             reuse_address=True,
             reuse_port=True,
-            print=None,
+            print=lambda *x: None,
         )
 
     async def _page_index(self, request: Request) -> Response:  # pylint: disable=W0613
@@ -113,8 +115,11 @@ class Frontend:
             _logger.error(f"File {static!r} not in resources")
             raise web.HTTPNotFound() from e
 
+    async def _message_content(self, msg: Message) -> bytes:
+        return bytes((await msg.load_content(FetchRequirement.CONTENT)).content)
+
     async def _convert_message(self, msg: Message, full: bool = False) -> dict:
-        content = bytes((await msg.load_content([])).content)
+        content = await self._message_content(msg)
 
         message = message_from_bytes(content)
         result = {
@@ -243,7 +248,7 @@ class Frontend:
         message = None
         async for msg in mailbox.messages():
             if msg.uid == uid:
-                content = content = bytes((await msg.load_content([])).content)
+                content = await self._message_content(msg)
                 message = message_from_bytes(content)
 
         if not message or not message.is_multipart():
@@ -254,7 +259,9 @@ class Frontend:
                 part.get_content_disposition() == "attachment"
                 and part.get_filename() == attachment
             ):
-                body = part.get_payload(decode=part.get("Content-Transfer-Encoding"))
+                body = part.get_payload(
+                    decode=bool(part.get("Content-Transfer-Encoding"))
+                )
                 return web.Response(
                     body=body.decode(),
                     headers={
@@ -272,10 +279,9 @@ class Frontend:
             uid = int(request.match_info["uid"])
 
             if request.method in ("DELETE", "PUT"):
-                flag = request.match_info["flag"].title()
-                flag = Flag(b"\\" + flag.encode())
+                flags = [Flag(b"\\" + request.match_info["flag"].title().encode())]
             else:
-                flag = None
+                flags = []
         except (IndexError, KeyError) as e:
             raise web.HTTPNotFound() from e
 
@@ -284,9 +290,9 @@ class Frontend:
                 continue
 
             if request.method == "DELETE":
-                msg.permanent_flags = msg.permanent_flags.difference([flag])
+                msg.permanent_flags = msg.permanent_flags.difference(flags)
             elif request.method == "PUT":
-                msg.permanent_flags = msg.permanent_flags.union([flag])
+                msg.permanent_flags = msg.permanent_flags.union(flags)
 
             return web.json_response(flags_to_api(msg.permanent_flags))
 

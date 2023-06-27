@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from email.message import Message
-from typing import Any, Optional, Type, Union
+from typing import Any, Type
 
 from aiosmtpd.handlers import AsyncMessage
 from aiosmtpd.smtp import SMTP, AuthResult, Envelope, LoginPassword, Session
@@ -12,7 +12,7 @@ from pymap.parsing.specials.flag import Flag
 _logger = logging.getLogger(__name__)
 
 
-def ensure_bytes(x: Union[bytes, str]) -> bytes:
+def ensure_bytes(x: bytes | str) -> bytes:
     return x.encode() if isinstance(x, str) else x
 
 
@@ -45,13 +45,13 @@ class MemoryHandler(AsyncMessage):
         self,
         mailbox: MailboxData,
         flagged_seen: bool = False,
-        message_class: Optional[Type[Message]] = None,
+        message_class: Type[Message] | None = None,
     ):
         super().__init__(message_class)
         self.mailbox = mailbox
         self.flagged_seen = flagged_seen
 
-    async def handle_message(self, message: Message) -> None:
+    async def handle_message(self, message: Message) -> None:  # type: ignore
         _logger.info(f"Got message {message['From']} -> {message['To']}")
         msg = AppendMessage(
             literal=str(message).encode(),

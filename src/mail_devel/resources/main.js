@@ -40,6 +40,7 @@ class MailClient {
     vis("#content textarea#plain", this.content_mode === "plain");
     vis("#content textarea#source", this.content_mode === "source");
     vis("#editor .header .extra", this.editor_mode === "advanced");
+    vis("#editor #btn-add-header", this.editor_mode === "advanced");
 
     document.getElementById("btn-advanced").innerText = (
       `${this.editor_mode === "simple" ? "Advanced" : "Simple"} View`
