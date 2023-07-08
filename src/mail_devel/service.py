@@ -123,6 +123,7 @@ class Service:
                 port=args.http_port,
                 devel=args.devel,
                 flagged_seen=args.flagged_seen,
+                client_max_size=args.client_max_size,
             )
 
         return service
@@ -204,6 +205,12 @@ class Service:
             dest="http",
             action="store_false",
             help="Disable the HTTP server",
+        )
+        group.add_argument(
+            "--client-max-size",
+            default="1M",
+            type=utils.convert_size,
+            help="Max body size for POST requests",
         )
 
         group = parser.add_argument_group("SMTP")

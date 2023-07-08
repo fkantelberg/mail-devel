@@ -153,7 +153,7 @@ button {
   left: 150px;
   bottom: 150px;
   right: 150px;
-  grid-template-rows: max-content max-content auto;
+  grid-template-rows: max-content max-content min-content auto;
 }
 
 #editor-content {
@@ -166,7 +166,7 @@ button {
   overflow-y: scroll;
   padding: 3px;
 }
-#editor-header th {
+#editor-header th, #editor-attachments th {
   position: relative;
   min-width: 150px;
 }

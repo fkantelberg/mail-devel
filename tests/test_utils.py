@@ -36,6 +36,11 @@ def test_configure_logging():
     list(map(log.removeHandler, log.handlers))
 
 
+def test_convert_size():
+    assert utils.convert_size("1.5") == 1
+    assert utils.convert_size("1.5K") == 1536
+
+
 def test_valid_file():
     with pytest.raises(FileNotFoundError):
         assert utils.valid_file(__file__ + "a")

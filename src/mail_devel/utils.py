@@ -90,6 +90,14 @@ def generate_ssl_context(
     return ctx
 
 
+def convert_size(x: str) -> int:
+    x = x.upper()
+    for c, m in {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30}.items():
+        if x.endswith(c):
+            return int(m * float(x[:-1]))
+    return int(float(x))
+
+
 def valid_file(path: str) -> str:
     """Check if a file exists and return the absolute path otherwise raise an
     error. This function is used for the argument parsing"""

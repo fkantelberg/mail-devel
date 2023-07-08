@@ -131,9 +131,29 @@ async def test_mail_devel_http():
                 assert msg["header"]["to"] == "test <test@example.org>"
                 assert msg["header"]["message-id"].endswith("@mail-devel")
 
-            msg["body"] = "hello"
+            async with session.get("/api/INBOX/999/reply") as response:
+                assert response.status == 404
+
+            msg.update(
+                {
+                    "body": "hello",
+                    "attachments": [
+                        {
+                            "mimetype": "text/plain",
+                            "name": "file.txt",
+                            "content": "aGVsbG8gd29ybGQ=",
+                        }
+                    ],
+                }
+            )
             async with session.post("/api", json=msg) as response:
                 assert response.status == 200
+
+            async with session.post("/api", json={}) as response:
+                assert response.status == 400
+
+            async with session.post("/api", json=[]) as response:
+                assert response.status == 400
 
             async with session.get("/api/INBOX") as response:
                 assert response.status == 200

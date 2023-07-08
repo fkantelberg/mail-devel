@@ -8,6 +8,15 @@ function element(tag, attrs) {
   return ele;
 }
 
+function file_to_base64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.replace(/.*,/, ""));
+    reader.onerror = reject;
+  });
+}
+
 function vis(selector, visible) {
   const elements = document.querySelectorAll(selector);
   if (!elements)
@@ -286,9 +295,20 @@ class MailClient {
         headers[key] = value;
     }
 
+    const attachments = [];
+    for (const file of document.querySelector("#editor-attachments input").files) {
+      attachments.push({
+        size: file.size,
+        mimetype: file.type,
+        name: file.name,
+        content: await file_to_base64(file),
+      });
+    }
+
     await this.post_data({
       header: headers,
       body: document.querySelector("#editor-content textarea").value,
+      attachments: attachments,
     });
 
     document.querySelector("#editor").classList.add("hidden");
@@ -323,6 +343,7 @@ class MailClient {
     }
 
     document.querySelector("#editor-content textarea").value = body || "";
+    document.querySelector("#editor-attachments input").value = "";
   }
 
   async initialize() {

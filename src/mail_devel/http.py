@@ -1,9 +1,10 @@
 import logging
-import sys
 import uuid
 from datetime import datetime
 from email import message_from_bytes
-from email.message import EmailMessage
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from importlib import resources
 
 from aiohttp import web
@@ -17,7 +18,7 @@ from pymap.parsing.specials.flag import Flag
 _logger = logging.getLogger(__name__)
 
 
-def flags_to_api(flags):
+def flags_to_api(flags: frozenset[Flag]) -> list[str]:
     return [f.value.decode().strip("\\").lower() for f in flags]
 
 
@@ -30,6 +31,7 @@ class Frontend:
         port: int = 8080,
         devel: bool = False,
         flagged_seen: bool = False,
+        client_max_size: int = 1 << 20,
     ):
         self.mailbox_set: MailboxSet = mailbox_set
         self.api: web.Application | None = None
@@ -38,20 +40,14 @@ class Frontend:
         self.user: str = user
         self.devel: bool = devel
         self.flagged_seen: bool = flagged_seen
+        self.client_max_size: int = client_max_size
 
     def load_resource(self, resource: str) -> str:
-        if self.devel:
+        if self.devel:  # pragma: no cover
             with open(resource, encoding="utf-8") as fp:
                 return fp.read()
 
         package = f"{__package__}.resources"
-
-        if sys.version_info < (3, 9):
-            if not resources.is_resource(package, resource):
-                raise FileNotFoundError()
-
-            return resources.read_text(package, resource)
-
         res = resources.files(package).joinpath(resource)
         if not res.is_file():
             raise FileNotFoundError()
@@ -59,7 +55,7 @@ class Frontend:
         return res.read_text(encoding="utf-8")
 
     async def start(self) -> None:
-        self.api = web.Application()
+        self.api = web.Application(client_max_size=self.client_max_size)
 
         self.api.add_routes(
             [
@@ -82,7 +78,7 @@ class Frontend:
 
         return await web._run_app(
             self.api,
-            host=self.host,
+            host=self.host or None,
             port=self.port,
             access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
             reuse_address=True,
@@ -96,7 +92,7 @@ class Frontend:
                 body=self.load_resource("index.html"),
                 content_type="text/html",
             )
-        except FileNotFoundError as e:
+        except FileNotFoundError as e:  # pragma: no cover
             _logger.error("File 'index.html' not in resources")
             raise web.HTTPNotFound() from e
 
@@ -106,12 +102,12 @@ class Frontend:
             mimetype = "text/javascript"
         elif static.endswith(".css"):
             mimetype = "text/css"
-        else:
+        else:  # pragma: no cover
             raise web.HTTPNotFound()
 
         try:
             return Response(body=self.load_resource(static), content_type=mimetype)
-        except FileNotFoundError as e:
+        except FileNotFoundError as e:  # pragma: no cover
             _logger.error(f"File {static!r} not in resources")
             raise web.HTTPNotFound() from e
 
@@ -165,17 +161,27 @@ class Frontend:
         if not isinstance(header, dict) or not isinstance(body, str):
             raise web.HTTPBadRequest()
 
-        message = EmailMessage()
+        message = MIMEMultipart()
+        message.attach(MIMEText(body))
+
         for key, value in header.items():
             if key.strip() and value.strip():
                 message.add_header(key.title(), value)
 
-        message.set_content(body)
+        for att in data.get("attachments", []):
+            part = MIMEBase(*(att["mimetype"] or "text/plain").split("/"))
+            part.set_payload(att["content"])
+            part.add_header("Content-Transfer-Encoding", "base64")
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{att["name"]}"',  # noqa: B907
+            )
+            message.attach(part)
 
         mailbox = await self.mailbox_set.get_mailbox("INBOX")
         await mailbox.append(
             AppendMessage(
-                literal=str(message).encode(),
+                literal=message.as_bytes(),
                 when=datetime.now(),
                 flag_set=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
             )
@@ -186,7 +192,7 @@ class Frontend:
         try:
             name = request.match_info["mailbox"]
             mailbox = await self.mailbox_set.get_mailbox(name)
-        except KeyError as e:
+        except KeyError as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
         result = []
@@ -199,7 +205,7 @@ class Frontend:
             name = request.match_info["mailbox"]
             uid = int(request.match_info["uid"])
             mailbox = await self.mailbox_set.get_mailbox(name)
-        except (IndexError, KeyError) as e:
+        except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
         async for msg in mailbox.messages():
@@ -213,7 +219,7 @@ class Frontend:
             name = request.match_info["mailbox"]
             uid = int(request.match_info["uid"])
             mailbox = await self.mailbox_set.get_mailbox(name)
-        except (IndexError, KeyError) as e:
+        except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
         async for msg in mailbox.messages():
@@ -242,7 +248,7 @@ class Frontend:
             uid = int(request.match_info["uid"])
             attachment = request.match_info["attachment"]
             mailbox = await self.mailbox_set.get_mailbox(name)
-        except (IndexError, KeyError) as e:
+        except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
         message = None
@@ -259,11 +265,10 @@ class Frontend:
                 part.get_content_disposition() == "attachment"
                 and part.get_filename() == attachment
             ):
-                body = part.get_payload(
-                    decode=bool(part.get("Content-Transfer-Encoding"))
-                )
+                cte = part.get("Content-Transfer-Encoding")
+                body = part.get_payload(decode=bool(cte))
                 return web.Response(
-                    body=body.decode(),
+                    body=body,
                     headers={
                         "Content-Type": part.get("Content-Type"),
                         "Content-Disposition": part.get("Content-Disposition"),
@@ -282,7 +287,7 @@ class Frontend:
                 flags = [Flag(b"\\" + request.match_info["flag"].title().encode())]
             else:
                 flags = []
-        except (IndexError, KeyError) as e:
+        except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
         async for msg in mailbox.messages():
