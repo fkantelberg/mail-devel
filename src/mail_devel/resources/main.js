@@ -31,9 +31,12 @@ function vis(selector, visible) {
 
 class MailClient {
   constructor() {
+    this.users = document.getElementById("accounts");
+    this.connection = document.querySelector("#connection input[type=checkbox]");
     this.mailboxes = document.getElementById("mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
     this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
+    this.user_name = null;
     this.mailbox_name = null;
     this.mail_uid = null;
     this.mail_selected = null;
@@ -59,9 +62,15 @@ class MailClient {
   async idle() {
     const self = this;
 
-    await this.fetch_mailboxes();
-    if (this.mailbox_name)
-      await this.fetch_mailbox(this.mailbox_name);
+    if (this.connection.checked) {
+        await this.fetch_accounts();
+
+        if (this.user_name)
+          await this.fetch_mailboxes(this.user_name);
+
+        if (this.mailbox_name)
+          await this.fetch_mailbox(this.mailbox_name);
+    }
 
     setTimeout(() => {self.idle();}, 2000);
   }
@@ -151,11 +160,50 @@ class MailClient {
     });
   }
 
-  async fetch_mailboxes() {
+  async fetch_accounts() {
     const self = this;
     const data = await this.fetch_data();
     if (data === null)
       return;
+
+    for (const opt of this.users.options) {
+      const idx = data.indexOf(opt.value);
+      if (idx >= 0)
+        data.splice(idx, 1);
+      else
+        opt.remove();
+    }
+
+    for (const user of data)
+      this.users.add(new Option(user, user));
+
+    if (this.users.selectedIndex < 0) {
+      this.users.selectedIndex = 0;
+      if (this.users.options[0]) {
+        await self.fetch_mailboxes(this.users.options[0].value);
+      }
+    } else {
+      const selected = this.users.options[this.users.selectedIndex].value;
+      if (this.user_name !== selected) {
+        await self.fetch_mailboxes(selected);
+      }
+    }
+  }
+
+  async fetch_mailboxes(user_name) {
+    const self = this;
+    const data = await this.fetch_data(user_name);
+    if (data === null)
+      return;
+
+    if (this.user_name !== user_name) {
+      this.mailbox_name = null;
+      this.mail_uid = null;
+      this.mailbox.innerHTML = "";
+      this.mailboxes.selectedIndex = -1;
+    }
+
+    this.user_name = user_name;
 
     for (const opt of this.mailboxes.options) {
       const idx = data.indexOf(opt.value);
@@ -179,7 +227,7 @@ class MailClient {
 
   async fetch_mailbox(mailbox_name) {
     const self = this;
-    const data = await this.fetch_data(mailbox_name);
+    const data = await this.fetch_data(this.user_name, mailbox_name);
     if (data === null)
       return;
 
@@ -222,7 +270,7 @@ class MailClient {
 
   async fetch_mail(uid) {
     const self = this;
-    const data = await this.fetch_data(this.mailbox_name, uid);
+    const data = await this.fetch_data(this.user_name, this.mailbox_name, uid);
     if (data === null)
       return;
 
@@ -319,7 +367,9 @@ class MailClient {
     if (!this.mailbox_name || !this.mail_uid)
       return;
 
-    const data = await this.fetch_data(this.mailbox_name, this.mail_uid, "reply");
+    const data = await this.fetch_data(
+      this.user_name, this.mailbox_name, this.mail_uid, "reply"
+    );
     if (data === null)
       return;
 

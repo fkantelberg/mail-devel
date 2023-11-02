@@ -1,4 +1,6 @@
-FROM python:3.11-alpine
+ARG PYTHON_VERSION=3.11
+
+FROM python:${PYTHON_VERSION}-alpine
 
 RUN pip install -U pip mail-devel
 

@@ -13,7 +13,7 @@ from pymap.imap import IMAPConfig, IMAPService
 
 from . import utils
 from .http import Frontend
-from .mailbox import TestMailboxSet
+from .mailbox import TestMailboxDict
 from .smtp import Authenticator, MemoryHandler
 
 try:
@@ -51,7 +51,7 @@ class Service:
         self.backend: DictBackend | None = None
         self.config: IMAPConfig | None = None
         self.handler: MemoryHandler | None = None
-        self.mailbox_set: TestMailboxSet | None = None
+        self.mailboxes: TestMailboxDict | None = None
         self.filter_set: FilterSet | None = None
         self.ssl_context: ssl.SSLContext | None = None
 
@@ -79,19 +79,17 @@ class Service:
                 cert=args.cert, key=args.key
             )
 
-        # Create the mailbox
-        service.mailbox_set = TestMailboxSet()
-        service.filter_set = FilterSet()
-        inbox = await service.mailbox_set.get_mailbox("INBOX")
-
         # Create the IMAP and optionally IMAPS service
+        service.filter_set = FilterSet()
         backend_args = await imap_context(args)
         service.backend, service.config = await DictBackend.init(backend_args)
-        service.config.set_cache[args.user] = service.mailbox_set, service.filter_set
+        service.mailboxes = TestMailboxDict(
+            service.config, service.filter_set, args.multi_user
+        )
         service.imap = IMAPService(service.backend, service.config)
 
         # Create the SMTP and optionally SMTPS service
-        service.handler = MemoryHandler(inbox, args.flagged_seen)
+        service.handler = MemoryHandler(service.mailboxes, args.flagged_seen)
         service.smtp = Controller(
             service.handler,
             hostname=args.smtp_host or args.host,
@@ -117,7 +115,7 @@ class Service:
         # Create the HTTP service
         if args.http:
             service.frontend = Frontend(
-                service.mailbox_set,
+                service.mailboxes,
                 user=args.user,
                 host=args.http_host or args.host,
                 port=args.http_port,
@@ -159,6 +157,12 @@ class Service:
             default=os.environ.get("MAIL_USER", "test@example.org"),
             help="The user account for SMTP and IMAP. Can also be set using "
             "the environment variable MAIL_USER. Default is %(default)s",
+        )
+        parser.add_argument(
+            "--multi-user",
+            action="store_true",
+            help="Switches from the single mailbox to multi mailbox mode. The "
+            "password will be reused for every mailbox",
         )
         pw = parser.add_argument(
             "--password",

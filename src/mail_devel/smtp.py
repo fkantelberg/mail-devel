@@ -1,13 +1,12 @@
 import logging
-from datetime import datetime
 from email.message import Message
 from typing import Any, Type
 
 from aiosmtpd.handlers import AsyncMessage
 from aiosmtpd.smtp import SMTP, AuthResult, Envelope, LoginPassword, Session
-from pymap.backend.dict import MailboxData
-from pymap.parsing.message import AppendMessage
 from pymap.parsing.specials.flag import Flag
+
+from .mailbox import TestMailboxDict
 
 _logger = logging.getLogger(__name__)
 
@@ -43,19 +42,19 @@ class Authenticator:
 class MemoryHandler(AsyncMessage):
     def __init__(
         self,
-        mailbox: MailboxData,
+        mailboxes: TestMailboxDict,
         flagged_seen: bool = False,
         message_class: Type[Message] | None = None,
+        multi_user: bool = False,
     ):
         super().__init__(message_class)
-        self.mailbox = mailbox
+        self.mailboxes = mailboxes
         self.flagged_seen = flagged_seen
+        self.multi_user = multi_user
 
     async def handle_message(self, message: Message) -> None:  # type: ignore
         _logger.info(f"Got message {message['From']} -> {message['To']}")
-        msg = AppendMessage(
-            literal=str(message).encode(),
-            when=datetime.now(),
-            flag_set=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+        await self.mailboxes.append(
+            message,
+            flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
         )
-        await self.mailbox.append(msg)

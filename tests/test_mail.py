@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
-
 from mail_devel import Service
 from mail_devel import __main__ as main
 
@@ -17,7 +16,9 @@ Message-ID: <ce22c843-2061-33e9-403c-40ef9261a2cf@example.org>
 Date: Sat, 18 Feb 2023 15:01:13 +0100
 MIME-Version: 1.0
 Content-Language: en-US
-To: test@localhost
+To: test@localhost, second <second@localhost>
+Cc: cc@localhost
+Bcc: bcc@localhost
 From: test <test@example.org>
 Subject: hello
 
@@ -60,12 +61,13 @@ async def test_mail_devel_no_password():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_smtp():
+async def test_mail_devel_service():
     smtp_port, http_port = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=smtp_port, http_port=http_port)
-    mailbox = await service.mailbox_set.get_mailbox("INBOX")
-    sent = await service.mailbox_set.get_mailbox("SENT")
+    account = await service.mailboxes.get("main")
+    mailbox = await account.get_mailbox("INBOX")
+    sent = await account.get_mailbox("SENT")
 
     async with service.start():
         await asyncio.sleep(0.1)
@@ -84,8 +86,9 @@ async def test_mail_devel_http():
     smtp_port, http_port = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=smtp_port, http_port=http_port)
-    mailbox = await service.mailbox_set.get_mailbox("INBOX")
-    await service.mailbox_set.get_mailbox("SENT")
+    account = await service.mailboxes.get("main")
+    mailbox = await account.get_mailbox("INBOX")
+    await account.get_mailbox("SENT")
 
     assert service.frontend.load_resource("index.html")
     assert service.frontend.load_resource("main.css")
@@ -109,29 +112,35 @@ async def test_mail_devel_http():
 
             async with session.get("/api") as response:
                 assert response.status == 200
-                mailbox = await response.json()
-                assert len(mailbox) == 2
-                assert "INBOX" in mailbox
+                users = await response.json()
+                assert len(users) == 1
+                assert "main" in users
 
-            async with session.get("/api/INBOX") as response:
+            async with session.get("/api/main") as response:
+                assert response.status == 200
+                users = await response.json()
+                assert len(users) == 2
+                assert "INBOX" in users
+
+            async with session.get("/api/main/INBOX") as response:
                 assert response.status == 200
                 mbox = await response.json()
                 assert len(mbox) == 1
                 assert mbox[0]["uid"] == 101
 
-            async with session.get("/api/INBOX/101") as response:
+            async with session.get("/api/main/INBOX/101") as response:
                 assert response.status == 200
                 msg = await response.json()
                 assert msg
                 assert msg["attachments"]
 
-            async with session.get("/api/INBOX/101/reply") as response:
+            async with session.get("/api/main/INBOX/101/reply") as response:
                 assert response.status == 200
                 msg = await response.json()
                 assert msg["header"]["to"] == "test <test@example.org>"
                 assert msg["header"]["message-id"].endswith("@mail-devel")
 
-            async with session.get("/api/INBOX/999/reply") as response:
+            async with session.get("/api/main/INBOX/999/reply") as response:
                 assert response.status == 404
 
             msg.update(
@@ -155,41 +164,47 @@ async def test_mail_devel_http():
             async with session.post("/api", json=[]) as response:
                 assert response.status == 400
 
-            async with session.get("/api/INBOX") as response:
+            async with session.get("/api/main/INBOX") as response:
                 assert response.status == 200
                 mbox = await response.json()
                 assert len(mbox) == 2
 
-            async with session.get("/api/INBOX/101/attachment/att abc.txt") as response:
+            async with session.get(
+                "/api/main/INBOX/101/attachment/att abc.txt"
+            ) as response:
                 assert response.status == 200
                 assert await response.text() == "hello world"
 
-            async with session.get("/api/INBOX/101/flags") as response:
+            async with session.get("/api/main/INBOX/101/flags") as response:
                 assert response.status == 200
                 assert await response.json() == []
 
-            async with session.put("/api/INBOX/101/flags/unseen") as response:
+            async with session.put("/api/main/INBOX/101/flags/unseen") as response:
                 assert response.status == 200
                 assert await response.json() == ["unseen"]
 
-            async with session.get("/api/INBOX/101/flags") as response:
+            async with session.get("/api/main/INBOX/101/flags") as response:
                 assert response.status == 200
                 assert await response.json() == ["unseen"]
 
-            async with session.delete("/api/INBOX/101/flags/unseen") as response:
+            async with session.delete("/api/main/INBOX/101/flags/unseen") as response:
                 assert response.status == 200
                 assert await response.json() == []
 
-            async with session.put("/api/INBOX/999/flags/unseen") as response:
+            async with session.put("/api/main/INBOX/999/flags/unseen") as response:
                 assert response.status == 404
 
-            async with session.get("/api/INBOX/101/attachment/unknown.txt") as response:
+            async with session.get(
+                "/api/main/INBOX/101/attachment/unknown.txt"
+            ) as response:
                 assert response.status == 404
 
-            async with session.get("/api/INBOX/999/attachment/att abc.txt") as response:
+            async with session.get(
+                "/api/main/INBOX/999/attachment/att abc.txt"
+            ) as response:
                 assert response.status == 404
 
-            async with session.get("/api/INBOX/999") as response:
+            async with session.get("/api/main/INBOX/999") as response:
                 assert response.status == 404
 
 
@@ -198,7 +213,8 @@ async def test_mail_devel_smtp_auth():
     port = unused_ports()
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=port)
-    mailbox = await service.mailbox_set.get_mailbox("INBOX")
+    account = await service.mailboxes.get("main")
+    mailbox = await account.get_mailbox("INBOX")
 
     await asyncio.sleep(0.2)
     async with service.start():
