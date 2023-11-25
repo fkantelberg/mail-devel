@@ -1,28 +1,13 @@
 import asyncio
 import logging
 import signal
-import sys
 from argparse import Namespace
 from contextlib import suppress
-
-from pymap.parsing.specials.searchkey import SearchKey
 
 from . import VERSION, utils
 from .service import Service
 
 _logger = logging.getLogger(__name__)
-
-
-# Manual patch for https://github.com/icgood/pymap/pull/138 for py3.10
-if sys.version_info[:2] == (3, 10):
-    original_func = SearchKey.__init__
-
-    def patched_searchkey(self, key, filter_=None, inverse=False):
-        if isinstance(filter_, list):
-            filter_ = frozenset(filter_)
-        return original_func(self, key, filter_, inverse)
-
-    SearchKey.__init__ = patched_searchkey
 
 
 async def sleep_forever() -> None:
