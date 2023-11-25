@@ -1,7 +1,6 @@
 import logging
 import uuid
-from datetime import datetime
-from email import message_from_bytes
+from email import header, message_from_bytes
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -9,13 +8,17 @@ from importlib import resources
 
 from aiohttp import web
 from aiohttp.web import Request, Response
-from pymap.backend.dict import MailboxSet
 from pymap.backend.dict.mailbox import Message
-from pymap.parsing.message import AppendMessage
 from pymap.parsing.specials import FetchRequirement
 from pymap.parsing.specials.flag import Flag
 
+from .mailbox import TestMailboxDict
+
 _logger = logging.getLogger(__name__)
+
+
+def decode_header(value: str) -> str:
+    return str(header.make_header(header.decode_header(value)))
 
 
 def flags_to_api(flags: frozenset[Flag]) -> list[str]:
@@ -25,15 +28,16 @@ def flags_to_api(flags: frozenset[Flag]) -> list[str]:
 class Frontend:
     def __init__(
         self,
-        mailbox_set: MailboxSet,
+        mailboxes: TestMailboxDict,
         user: str,
         host: str = "",
         port: int = 8080,
         devel: bool = False,
         flagged_seen: bool = False,
         client_max_size: int = 1 << 20,
+        multi_user: bool = False,
     ):
-        self.mailbox_set: MailboxSet = mailbox_set
+        self.mailboxes: TestMailboxDict = mailboxes
         self.api: web.Application | None = None
         self.host: str = host
         self.port: int = port
@@ -41,6 +45,7 @@ class Frontend:
         self.devel: bool = devel
         self.flagged_seen: bool = flagged_seen
         self.client_max_size: int = client_max_size
+        self.multi_user: bool = multi_user
 
     def load_resource(self, resource: str) -> str:
         if self.devel:  # pragma: no cover
@@ -60,19 +65,25 @@ class Frontend:
         self.api.add_routes(
             [
                 web.get("/", self._page_index),
+                web.get("/config", self._api_config),
                 web.get(r"/{static:.*\.(css|js)}", self._page_static),
                 web.post(r"/api", self._api_post),
                 web.get(r"/api", self._api_index),
-                web.get(r"/api/{mailbox}", self._api_mailbox),
-                web.get(r"/api/{mailbox}/{uid:\d+}", self._api_message),
-                web.get(r"/api/{mailbox}/{uid:\d+}/reply", self._api_reply),
+                web.get(r"/api/{user}", self._api_user),
+                web.get(r"/api/{user}/{mailbox}", self._api_mailbox),
+                web.get(r"/api/{user}/{mailbox}/{uid:\d+}", self._api_message),
+                web.get(r"/api/{user}/{mailbox}/{uid:\d+}/reply", self._api_reply),
                 web.get(
-                    r"/api/{mailbox}/{uid:\d+}/attachment/{attachment}",
+                    r"/api/{user}/{mailbox}/{uid:\d+}/attachment/{attachment}",
                     self._api_attachment,
                 ),
-                web.get(r"/api/{mailbox}/{uid:\d+}/flags", self._api_flag),
-                web.put(r"/api/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag),
-                web.delete(r"/api/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag),
+                web.get(r"/api/{user}/{mailbox}/{uid:\d+}/flags", self._api_flag),
+                web.put(
+                    r"/api/{user}/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag
+                ),
+                web.delete(
+                    r"/api/{user}/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag
+                ),
             ]
         )
 
@@ -121,7 +132,7 @@ class Frontend:
         result = {
             "uid": msg.uid,
             "flags": flags_to_api(msg.permanent_flags),
-            "header": {k.lower(): v for k, v in message.items()},
+            "header": {k.lower(): decode_header(v) for k, v in message.items()},
             "date": msg.internal_date.isoformat(),
         }
 
@@ -148,8 +159,26 @@ class Frontend:
         result["content"] = bytes(content).decode()
         return result
 
+    async def _api_config(self, request: Request) -> Response:  # pylint: disable=W0613
+        return web.json_response(
+            {
+                "multi_user": self.multi_user,
+                "flagged_seen": self.flagged_seen,
+            }
+        )
+
     async def _api_index(self, request: Request) -> Response:  # pylint: disable=W0613
-        mailboxes = await self.mailbox_set.list_mailboxes()
+        mailboxes = await self.mailboxes.list()
+        return web.json_response(mailboxes)
+
+    async def _api_user(self, request: Request) -> Response:  # pylint: disable=W0613
+        try:
+            user = request.match_info["user"]
+            mailbox = self.mailboxes[user]
+        except KeyError as e:  # pragma: no cover
+            raise web.HTTPNotFound() from e
+
+        mailboxes = await mailbox.list_mailboxes()
         return web.json_response([e.name for e in mailboxes.list()])
 
     async def _api_post(self, request: Request) -> Response:
@@ -178,20 +207,17 @@ class Frontend:
             )
             message.attach(part)
 
-        mailbox = await self.mailbox_set.get_mailbox("INBOX")
-        await mailbox.append(
-            AppendMessage(
-                literal=message.as_bytes(),
-                when=datetime.now(),
-                flag_set=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
-            )
+        await self.mailboxes.append(
+            message,
+            flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
         )
         return web.json_response({"status": "ok"})
 
     async def _api_mailbox(self, request: Request) -> Response:
         try:
+            user = request.match_info["user"]
             name = request.match_info["mailbox"]
-            mailbox = await self.mailbox_set.get_mailbox(name)
+            mailbox = await self.mailboxes[user].get_mailbox(name)
         except KeyError as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -202,9 +228,10 @@ class Frontend:
 
     async def _api_message(self, request: Request) -> Response:
         try:
+            user = request.match_info["user"]
             name = request.match_info["mailbox"]
             uid = int(request.match_info["uid"])
-            mailbox = await self.mailbox_set.get_mailbox(name)
+            mailbox = await self.mailboxes[user].get_mailbox(name)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -216,9 +243,10 @@ class Frontend:
 
     async def _api_reply(self, request: Request) -> Response:
         try:
+            user = request.match_info["user"]
             name = request.match_info["mailbox"]
             uid = int(request.match_info["uid"])
-            mailbox = await self.mailbox_set.get_mailbox(name)
+            mailbox = await self.mailboxes[user].get_mailbox(name)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -244,10 +272,11 @@ class Frontend:
 
     async def _api_attachment(self, request: Request) -> Response:
         try:
+            user = request.match_info["user"]
             name = request.match_info["mailbox"]
             uid = int(request.match_info["uid"])
             attachment = request.match_info["attachment"]
-            mailbox = await self.mailbox_set.get_mailbox(name)
+            mailbox = await self.mailboxes[user].get_mailbox(name)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -279,8 +308,9 @@ class Frontend:
 
     async def _api_flag(self, request: Request) -> Response:
         try:
+            user = request.match_info["user"]
             name = request.match_info["mailbox"]
-            mailbox = await self.mailbox_set.get_mailbox(name)
+            mailbox = await self.mailboxes[user].get_mailbox(name)
             uid = int(request.match_info["uid"])
 
             if request.method in ("DELETE", "PUT"):

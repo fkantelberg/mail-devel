@@ -7,7 +7,7 @@ from contextlib import suppress
 
 from pymap.parsing.specials.searchkey import SearchKey
 
-from . import utils
+from . import VERSION, utils
 from .service import Service
 
 _logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ async def sleep_forever() -> None:
 
 
 async def run(args: Namespace) -> None:
+    _logger.info(f"Version: {VERSION}")
     loop = asyncio.get_event_loop()
     service = await Service.init(args)
     async with service.start():

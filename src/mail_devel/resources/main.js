@@ -31,17 +31,22 @@ function vis(selector, visible) {
 
 class MailClient {
   constructor() {
+    this.users = document.getElementById("accounts");
+    this.connection = document.querySelector("#connection input[type=checkbox]");
     this.mailboxes = document.getElementById("mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
     this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
+    this.user_name = null;
     this.mailbox_name = null;
     this.mail_uid = null;
     this.mail_selected = null;
     this.content_mode = "html";
     this.editor_mode = "simple";
+    this.config = {};
   }
 
   async visibility() {
+    vis("#accounts", Boolean(this.config?.multi_user));
     vis("#btn-html", this.content_mode !== "html");
     vis("#btn-plain", this.content_mode !== "plain");
     vis("#btn-source", this.content_mode !== "source");
@@ -59,9 +64,15 @@ class MailClient {
   async idle() {
     const self = this;
 
-    await this.fetch_mailboxes();
-    if (this.mailbox_name)
-      await this.fetch_mailbox(this.mailbox_name);
+    if (this.connection.checked) {
+        await this.fetch_accounts();
+
+        if (this.user_name)
+          await this.fetch_mailboxes(this.user_name);
+
+        if (this.mailbox_name)
+          await this.fetch_mailbox(this.mailbox_name);
+    }
 
     setTimeout(() => {self.idle();}, 2000);
   }
@@ -75,9 +86,9 @@ class MailClient {
     }
   }
 
-  async fetch_data(...path) {
+  async fetch_json(path) {
     try {
-      const response = await fetch(path.length ? `/api/${path.join('/')}` : "/api");
+      const response = await fetch(path);
       if (response.status !== 200)
         return null;
 
@@ -85,6 +96,10 @@ class MailClient {
     } catch (TypeError) {
       return null;
     }
+  }
+
+  async fetch_data(...path) {
+    return await this.fetch_json(path.length ? `/api/${path.join('/')}` : "/api");
   }
 
   async post_data(data, ...path) {
@@ -133,29 +148,58 @@ class MailClient {
     cell(1, msg.header?.to);
     cell(2, msg.header?.subject);
     cell(3, (new Date(msg.date)).toLocaleString());
-
-    row.addEventListener("click", (ev) => {
-      let element = ev.target;
-      while (element && !element.uid) {
-        element = element.parentElement;
-      }
-
-      if (element.uid) {
-        if (self.mail_selected)
-          self.mail_selected.classList.remove("selected");
-
-        self.mail_selected = element;
-        self.mail_selected.classList.add("selected");
-        self.fetch_mail(element.uid);
-      }
-    });
   }
 
-  async fetch_mailboxes() {
+  async load_config() {
+    const data = await this.fetch_json("/config");
+    if (data !== null)
+      this.config = data;
+  }
+
+  async fetch_accounts() {
     const self = this;
     const data = await this.fetch_data();
     if (data === null)
       return;
+
+    for (const opt of this.users.options) {
+      const idx = data.indexOf(opt.value);
+      if (idx >= 0)
+        data.splice(idx, 1);
+      else
+        opt.remove();
+    }
+
+    for (const user of data)
+      this.users.add(new Option(user, user));
+
+    if (this.users.selectedIndex < 0) {
+      this.users.selectedIndex = 0;
+      if (this.users.options[0]) {
+        await self.fetch_mailboxes(this.users.options[0].value);
+      }
+    } else {
+      const selected = this.users.options[this.users.selectedIndex].value;
+      if (this.user_name !== selected) {
+        await self.fetch_mailboxes(selected);
+      }
+    }
+  }
+
+  async fetch_mailboxes(user_name) {
+    const self = this;
+    const data = await this.fetch_data(user_name);
+    if (data === null)
+      return;
+
+    if (this.user_name !== user_name) {
+      this.mailbox_name = null;
+      this.mail_uid = null;
+      this.mailbox.innerHTML = "";
+      this.mailboxes.selectedIndex = -1;
+    }
+
+    this.user_name = user_name;
 
     for (const opt of this.mailboxes.options) {
       const idx = data.indexOf(opt.value);
@@ -179,7 +223,7 @@ class MailClient {
 
   async fetch_mailbox(mailbox_name) {
     const self = this;
-    const data = await this.fetch_data(mailbox_name);
+    const data = await this.fetch_data(this.user_name, mailbox_name);
     if (data === null)
       return;
 
@@ -212,6 +256,23 @@ class MailClient {
       this.mailbox.append(row);
       row.uid = msg.uid;
       await self._mail_row(row, msg);
+
+      row.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        let element = ev.target;
+        while (element && !element.uid) {
+          element = element.parentElement;
+        }
+
+        if (element.uid) {
+          if (self.mail_selected)
+            self.mail_selected.classList.remove("selected");
+
+          self.mail_selected = element;
+          self.mail_selected.classList.add("selected");
+          self.fetch_mail(element.uid);
+        }
+      });
     }
 
     for (const line of this.mailbox.children) {
@@ -222,7 +283,7 @@ class MailClient {
 
   async fetch_mail(uid) {
     const self = this;
-    const data = await this.fetch_data(this.mailbox_name, uid);
+    const data = await this.fetch_data(this.user_name, this.mailbox_name, uid);
     if (data === null)
       return;
 
@@ -242,7 +303,7 @@ class MailClient {
 
     for (const attachment of data?.attachments || []) {
       const link = document.createElement("a");
-      link.href = `/api/${this.mailbox_name}/${uid}/attachment/${attachment}`;
+      link.href = `/api/${this.user_name}/${this.mailbox_name}/${uid}/attachment/${attachment}`;
       link.innerHTML = attachment;
       dropdown.append(link);
     }
@@ -269,7 +330,10 @@ class MailClient {
     value_td.append(value_input);
     btn_td.append(btn);
 
-    btn.addEventListener("click", (ev) => {row.remove();});
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      row.remove();
+    });
 
     row.append(key_td);
     row.append(value_td);
@@ -319,7 +383,9 @@ class MailClient {
     if (!this.mailbox_name || !this.mail_uid)
       return;
 
-    const data = await this.fetch_data(this.mailbox_name, this.mail_uid, "reply");
+    const data = await this.fetch_data(
+      this.user_name, this.mailbox_name, this.mail_uid, "reply"
+    );
     if (data === null)
       return;
 
@@ -349,47 +415,60 @@ class MailClient {
   async initialize() {
     const self = this;
     this.mailboxes.addEventListener("change", (ev) => {
+      ev.preventDefault();
       self.fetch_mailbox(ev.target.value);
     });
-    document.getElementById("btn-html").addEventListener("click", () => {
+    document.getElementById("btn-html").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.content_mode = "html";
       self.visibility();
     });
-    document.getElementById("btn-plain").addEventListener("click", () => {
+    document.getElementById("btn-plain").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.content_mode = "plain";
       self.visibility();
     });
-    document.getElementById("btn-source").addEventListener("click", () => {
+    document.getElementById("btn-source").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.content_mode = "source";
       self.visibility();
     });
     document.getElementById("btn-seen").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.set_flag("seen", "PUT");
     });
     document.getElementById("btn-unseen").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.set_flag("seen", "DELETE");
     });
     document.getElementById("btn-new").addEventListener("click", (ev) => {
+      ev.preventDefault();
       document.querySelector("#editor").classList.remove("hidden");
     });
     document.getElementById("btn-cancel").addEventListener("click", (ev) => {
+      ev.preventDefault();
       document.querySelector("#editor").classList.add("hidden");
       self.reset_editor();
     });
     document.getElementById("btn-send").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.send_mail();
     });
     document.getElementById("btn-reply").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.reply_mail();
     });
     document.getElementById("btn-advanced").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.editor_mode = (self.editor_mode === "simple") ? "advanced" : "simple";
       self.visibility();
     });
     document.getElementById("btn-add-header").addEventListener("click", (ev) => {
+      ev.preventDefault();
       self.add_header();
     });
 
+    await this.load_config();
     await this.visibility();
     await this.idle();
   }
