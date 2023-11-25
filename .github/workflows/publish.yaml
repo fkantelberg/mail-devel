@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  deploy pypi:
+  deploy-pypi:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           twine check dist/*
           twine upload dist/*
 
-  deploy docker:
+  deploy-docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
