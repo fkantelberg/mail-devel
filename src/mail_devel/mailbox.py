@@ -28,38 +28,38 @@ class TestMailboxDict:
     ):
         self.config = config
         self.filter_set = filter_set
-        self.accounts: dict[str, TestMailboxSet] = {}
         self.multi_user = multi_user
 
     def __contains__(self, user: str) -> bool:
-        return not self.multi_user or user in self.accounts
+        return not self.multi_user or user in self.config.set_cache
 
     def __getitem__(self, user: str) -> TestMailboxSet:
-        return self.accounts[user]
+        return self.config.set_cache[user][0]
+
+    async def inbox_stats(self) -> dict[str, int]:
+        stats = {}
+        for user, (mset, _fset) in self.config.set_cache.items():
+            mbox = await mset.get_mailbox("INBOX")
+            stats[user] = len([msg async for msg in mbox.messages()])
+        return stats
 
     async def list(self):
         """List the available mailbox accounts"""
-        if not self.multi_user and not self.accounts:
-            await self.get("main")
+        if not self.multi_user and not self.config.set_cache:
+            await self.get(self.config.demo_user)
 
-        return list(self.accounts)
+        return list(self.config.set_cache)
 
     async def get(self, user: str) -> TestMailboxSet:
         """Get the mailbox for the user or the main mailbox if single user mode"""
+        if not self.multi_user:
+            user = self.config.demo_user
 
-        if self.multi_user:
-            if user not in self.accounts:
-                mbox = self.accounts[user] = TestMailboxSet()
-                await mbox.get_mailbox("INBOX")
-                self.config.set_cache[user] = mbox, self.filter_set
-            return self.accounts[user]
-
-        if "main" not in self.accounts:
-            mbox = self.accounts["main"] = TestMailboxSet()
+        if user not in self.config.set_cache:
+            mbox = TestMailboxSet()
             await mbox.get_mailbox("INBOX")
-            self.config.set_cache["main"] = mbox, self.filter_set
-
-        return self.accounts["main"]
+            self.config.set_cache[user] = mbox, self.filter_set
+        return self.config.set_cache[user][0]
 
     async def append(self, message: Message, flags: frozenset[Flag]) -> None:
         """Push the message to the correct mailbox"""
@@ -80,7 +80,7 @@ class TestMailboxDict:
         )
 
         if not self.multi_user:
-            account = await self.get("main")
+            account = await self.get(self.config.demo_user)
             mailbox = await account.get_mailbox("INBOX")
             await mailbox.append(append_msg)
             return

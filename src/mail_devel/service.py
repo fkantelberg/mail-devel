@@ -8,13 +8,14 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from typing import AsyncGenerator
 
 from aiosmtpd.controller import Controller
-from pymap.backend.dict import DictBackend, FilterSet
+from pymap.backend.dict import Config, DictBackend, FilterSet
 from pymap.imap import IMAPConfig, IMAPService
 
 from . import utils
+from .auth import IMAPAuthenticator, SMTPAuthenticator
 from .http import Frontend
 from .mailbox import TestMailboxDict
-from .smtp import Authenticator, MemoryHandler
+from .smtp import MemoryHandler
 
 try:
     from typing import Self
@@ -45,6 +46,7 @@ class Service:
     def __init__(self, args: argparse.Namespace):
         self.args: argparse.Namespace = args
         self.imap: IMAPService | None = None
+        self.login: IMAPAuthenticator | None = None
         self.smtp: Controller | None = None
         self.smtps: Controller | None = None
         self.frontend: Frontend | None = None
@@ -54,6 +56,10 @@ class Service:
         self.mailboxes: TestMailboxDict | None = None
         self.filter_set: FilterSet | None = None
         self.ssl_context: ssl.SSLContext | None = None
+
+    @property
+    def demo_user(self):
+        return self.config.demo_user
 
     def log_connection_info(self) -> None:
         tls = bool(self.args.cert and self.args.key)
@@ -82,14 +88,23 @@ class Service:
         # Create the IMAP and optionally IMAPS service
         service.filter_set = FilterSet()
         backend_args = await imap_context(args)
-        service.backend, service.config = await DictBackend.init(backend_args)
+
+        service.config = Config.from_args(backend_args)
+        service.login = IMAPAuthenticator(service.config, args.multi_user)
+        await DictBackend._add_demo_user(service.config, service.login)
+        service.backend = DictBackend(service.login, service.config)
+
         service.mailboxes = TestMailboxDict(
             service.config, service.filter_set, args.multi_user
         )
         service.imap = IMAPService(service.backend, service.config)
 
         # Create the SMTP and optionally SMTPS service
-        service.handler = MemoryHandler(service.mailboxes, args.flagged_seen)
+        service.handler = MemoryHandler(
+            service.mailboxes,
+            args.flagged_seen,
+            multi_user=args.multi_user,
+        )
         service.smtp = Controller(
             service.handler,
             hostname=args.smtp_host or args.host,
@@ -98,7 +113,12 @@ class Service:
             auth_required=args.auth_required,
             auth_require_tls=args.auth_require_tls,
             require_starttls=args.starttls_required,
-            authenticator=Authenticator(args.user, args.password),
+            enable_SMTPUTF8=True,
+            authenticator=SMTPAuthenticator(
+                args.user,
+                args.password,
+                args.multi_user,
+            ),
         )
 
         if service.ssl_context:
@@ -109,7 +129,12 @@ class Service:
                 ssl_context=service.ssl_context,
                 auth_required=args.auth_required,
                 auth_require_tls=args.auth_require_tls,
-                authenticator=Authenticator(args.user, args.password),
+                enable_SMTPUTF8=True,
+                authenticator=SMTPAuthenticator(
+                    args.user,
+                    args.password,
+                    args.multi_user,
+                ),
             )
 
         # Create the HTTP service
@@ -122,6 +147,7 @@ class Service:
                 devel=args.devel,
                 flagged_seen=args.flagged_seen,
                 client_max_size=args.client_max_size,
+                multi_user=args.multi_user,
             )
 
         return service

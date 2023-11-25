@@ -7,6 +7,7 @@
   --special: #469;
 
   --slider: 20pt;
+  --font-big: 11pt;
 }
 
 @media (prefers-color-scheme: light) {
@@ -60,7 +61,7 @@ button {
 #mailboxes {
   display: block;
   flex: 1;
-  font-size: 15pt;
+  font-size: var(--font-big);
   height: 80%;
   width: 100%;
 }
@@ -127,6 +128,10 @@ button {
 }
 .container textarea {box-sizing: border-box; padding: 5px}
 
+#btn-new {
+  font-size: var(--font-big);
+  padding: 5pt 2pt;
+}
 #btn-dropdown button {
   cursor: pointer;
 }
@@ -191,6 +196,7 @@ button {
 #connection {
   background-color: var(--highlight);
   border-bottom: 2px solid var(--border);
+  font-size: var(--font-big);
   height: 20px;
   border-top: 2px solid var(--border);
   padding: 2px;
@@ -247,4 +253,8 @@ button {
   -webkit-transform: translateX(26px);
   -ms-transform: translateX(26px);
   transform: translateX(26px);
+}
+
+#accounts {
+  padding: 5pt 2pt;
 }
