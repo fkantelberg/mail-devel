@@ -80,7 +80,7 @@ class MailClient {
   async set_flag(flag, method) {
     if (this.mailbox_name && this.mail_uid) {
       await fetch(
-        `/api/${this.mailbox_name}/${this.mail_uid}/flags/seen`,
+        `/api/${this.user_name}/${this.mailbox_name}/${this.mail_uid}/flags/seen`,
         {method: method},
       );
     }
