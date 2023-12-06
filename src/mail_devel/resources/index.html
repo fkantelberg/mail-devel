@@ -14,8 +14,16 @@
     <div id="nav" class="container">
       <div id="logo">mail<span class="highlight">devel</span></div>
 
-      <div id="connection">
+      <div id="connection" class="switch">
         <strong>Connection:</strong>
+        <label>
+          <input type="checkbox" checked="checked">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="color-scheme" class="switch">
+        <strong>Color Scheme:</strong>
         <label>
           <input type="checkbox" checked="checked">
           <span class="slider"></span>
@@ -32,13 +40,33 @@
       <table>
         <thead>
           <tr>
-            <th id="mailbox-from">From</th>
-            <th id="mailbox-to">To</th>
-            <th id="mailbox-subject">Subject</th>
-            <th id="mailbox-date">Date</th>
+            <th class="summary">Summary</th>
+            <th class="date">Date</th>
+            <th class="read">Read</th>
           </tr>
         </thead>
         <tbody></tbody>
+        <tfoot>
+          <tr id="mail-row-template" class="hidden">
+            <td class="summary">
+              <div class="subject no-overflow"></div>
+              <table class="additional">
+                <tr>
+                  <td>From:</td>
+                  <td class="from no-overflow italic"></td>
+                </tr>
+                <tr>
+                  <td>To:</td>
+                  <td class="to no-overflow italic"></td>
+                </tr>
+              </table>
+            </td>
+            <td class="date"></td>
+            <td class="read">
+              <input type="checkbox" />
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 
@@ -69,8 +97,6 @@
           <button id="btn-html" type="button">Show HTML</button>
           <button id="btn-plain" type="button">Show Plain</button>
           <button id="btn-source" type="button">Show Source</button>
-          <button id="btn-seen" type="button">Seen</button>
-          <button id="btn-unseen" type="button">Unseen</button>
           <div id="btn-dropdown">
             <button type="button">Attachments</button>
             <div></div>

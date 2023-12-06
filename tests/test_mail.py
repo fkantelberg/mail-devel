@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
-
 from mail_devel import Service
 from mail_devel import __main__ as main
 
@@ -111,7 +110,7 @@ async def prepare_http_test():
     assert service.frontend.load_resource("main.js")
 
     async with service.start():
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
 
         assert not [msg async for msg in mailbox.messages()]
 
@@ -130,9 +129,9 @@ async def test_mail_devel_no_password():
 
 @pytest.mark.asyncio
 async def test_mail_devel_service():
-    smtp_port, http_port = unused_ports(2)
+    smtp_port = unused_ports()
     pw = token_hex(10)
-    service = await build_test_service(pw, smtp_port=smtp_port, http_port=http_port)
+    service = await build_test_service(pw, smtp_port=smtp_port, no_http=None)
     account = await service.mailboxes.get("main")
     mailbox = await account.get_mailbox("INBOX")
     sent = await account.get_mailbox("SENT")
@@ -283,7 +282,7 @@ async def test_mail_devel_http_attachment():
 async def test_mail_devel_smtp_auth():
     port = unused_ports()
     pw = token_hex(10)
-    service = await build_test_service(pw, smtp_port=port)
+    service = await build_test_service(pw, smtp_port=port, no_http=None)
     account = await service.mailboxes.get("test")
     mailbox = await account.get_mailbox("INBOX")
 
@@ -313,7 +312,7 @@ async def test_mail_devel_smtp_auth_multi_user():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
-        pw, imap_port=iport, smtp_port=sport, multi_user=None
+        pw, imap_port=iport, smtp_port=sport, multi_user=None, no_http=None
     )
 
     await asyncio.sleep(0.2)
@@ -333,7 +332,7 @@ async def test_mail_devel_smtp_auth_multi_user():
 async def test_mail_devel_imap_auth():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
-    service = await build_test_service(pw, imap_port=iport, smtp_port=sport)
+    service = await build_test_service(pw, imap_port=iport, smtp_port=sport, no_http=None)
 
     await asyncio.sleep(0.2)
     async with service.start():
@@ -353,7 +352,7 @@ async def test_mail_devel_imap_auth_multi_user():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
-        pw, imap_port=iport, smtp_port=sport, multi_user=None
+        pw, imap_port=iport, smtp_port=sport, multi_user=None, no_http=None
     )
 
     await asyncio.sleep(0.2)
@@ -377,7 +376,7 @@ async def test_mail_devel_imap_auth_multi_user_mails():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
-        pw, user="test@example.org", imap_port=iport, smtp_port=sport, multi_user=None
+        pw, user="test@example.org", imap_port=iport, smtp_port=sport, multi_user=None, no_http=None
     )
 
     expectations = [
@@ -418,8 +417,23 @@ async def test_main_sleep_forever():
 @pytest.mark.asyncio
 async def test_main():
     pw = token_hex(10)
-    args = ["--host", "127.0.0.1", "--user", "test", "--password", pw]
-    args = Service.parse(args)
+    sport, iport = unused_ports(2)
+
+    args = Service.parse(
+        [
+            "--host",
+            "127.0.0.1",
+            "--user",
+            "test",
+            "--password",
+            pw,
+            "--smtp-port",
+            str(sport),
+            "--imap-port",
+            str(iport),
+            "--no-http",
+        ]
+    )
     with patch("mail_devel.__main__.sleep_forever", autospec=True) as mock:
         await main.run(args)
         mock.assert_called_once()

@@ -98,10 +98,12 @@ def convert_size(x: str) -> int:
     return int(float(x))
 
 
-def valid_file(path: str) -> str:
+def valid_file(path: str, is_directory: bool = False) -> str:
     """Check if a file exists and return the absolute path otherwise raise an
     error. This function is used for the argument parsing"""
     path = os.path.abspath(path)
-    if not os.path.isfile(path):
+    if is_directory and not os.path.isdir(path):
+        raise NotADirectoryError()
+    if not is_directory and not os.path.isfile(path):
         raise FileNotFoundError()
     return path

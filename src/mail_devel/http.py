@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from email import header, message_from_bytes
 from email.mime.base import MIMEBase
@@ -32,7 +33,7 @@ class Frontend:
         user: str,
         host: str = "",
         port: int = 8080,
-        devel: bool = False,
+        devel: str = "",
         flagged_seen: bool = False,
         client_max_size: int = 1 << 20,
         multi_user: bool = False,
@@ -42,14 +43,14 @@ class Frontend:
         self.host: str = host
         self.port: int = port
         self.user: str = user
-        self.devel: bool = devel
+        self.devel: str = devel
         self.flagged_seen: bool = flagged_seen
         self.client_max_size: int = client_max_size
         self.multi_user: bool = multi_user
 
     def load_resource(self, resource: str) -> str:
         if self.devel:  # pragma: no cover
-            with open(resource, encoding="utf-8") as fp:
+            with open(os.path.join(self.devel, resource), encoding="utf-8") as fp:
                 return fp.read()
 
         package = f"{__package__}.resources"
@@ -224,6 +225,7 @@ class Frontend:
         result = []
         async for msg in mailbox.messages():
             result.append(await self._convert_message(msg))
+        result.sort(key=lambda x: x["date"], reverse=True)
         return web.json_response(result)
 
     async def _api_message(self, request: Request) -> Response:

@@ -43,6 +43,27 @@ class MailClient {
     this.content_mode = "html";
     this.editor_mode = "simple";
     this.config = {};
+
+    const toggle = document.querySelector("#color-scheme input");
+    if (document.documentElement.classList.contains("dark"))
+      toggle.checked = true;
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      toggle.checked = true
+    else
+      toggle.checked = false
+  }
+
+  async swap_theme() {
+    const toggle = document.querySelector("#color-scheme input");
+    if (toggle.checked) {
+      document.documentElement.classList.add("light");
+      document.documentElement.classList.remove("dark");
+    } else {
+      document.documentElement.classList.add("dark");
+      document.documentElement.classList.remove("light");
+    }
+
+    toggle.checked = !toggle.checked;
   }
 
   async visibility() {
@@ -77,10 +98,11 @@ class MailClient {
     setTimeout(() => {self.idle();}, 2000);
   }
 
-  async set_flag(flag, method) {
-    if (this.mailbox_name && this.mail_uid) {
+  async set_flag(flag, method, uid = null) {
+    const mail_uid = uid || this.mail_uid;
+    if (this.mailbox_name && mail_uid) {
       await fetch(
-        `/api/${this.user_name}/${this.mailbox_name}/${this.mail_uid}/flags/seen`,
+        `/api/${this.user_name}/${this.mailbox_name}/${mail_uid}/flags/seen`,
         {method: method},
       );
     }
@@ -124,30 +146,75 @@ class MailClient {
     }
   }
 
-  async _mail_row(row, msg) {
+  async _mail_row_fill(row, msg) {
     const self = this;
 
-    if ((msg?.flags || []).indexOf("seen") < 0)
+    if ((msg?.flags || []).indexOf("seen") < 0) {
       row.classList.add("unseen");
-    else
+      row.querySelector("td.read input").checked = false;
+    } else {
       row.classList.remove("unseen");
-
-    function cell (idx, val) {
-      let ele;
-      if (idx < row.children.length)
-        ele = row.children[idx];
-      else {
-        ele = document.createElement("td");
-        row.append(ele);
-      }
-
-      ele.innerHTML = (val || "").replace("<", "&lt;");
+      row.querySelector("td.read input").checked = true;
     }
 
-    cell(0, msg.header?.from);
-    cell(1, msg.header?.to);
-    cell(2, msg.header?.subject);
-    cell(3, (new Date(msg.date)).toLocaleString());
+    function content(selector, val) {
+      row.querySelector(selector).innerHTML = (val || "").replace("<", "&lt;");
+    }
+
+    content(".from", msg.header?.from);
+    content(".to", msg.header?.to);
+    content(".subject", msg.header?.subject);
+    content(".date", (new Date(msg.date)).toLocaleString());
+  }
+
+  async _mail_row_init(template, msg) {
+    const self = this;
+
+    const row = template.cloneNode(10);
+    row.removeAttribute("id");
+    row.classList.remove("hidden");
+    this.mailbox.append(row);
+
+    row.querySelector(".read input").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self._mail_row_click(ev.target, "read");
+    });
+
+    row.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self._mail_row_click(ev.target, "swap");
+    });
+
+    return row;
+  }
+
+  async _mail_row_click(element, type) {
+    const self = this;
+
+    let row = element;
+    while (row && !row.uid) {
+      row = row.parentElement;
+    }
+
+    if (!row.uid)
+      return;
+
+
+    switch (type) {
+      case "swap":
+        if (self.mail_selected)
+          self.mail_selected.classList.remove("selected");
+
+        self.mail_selected = row;
+        self.mail_selected.classList.add("selected");
+        await self.fetch_mail(row.uid);
+        break;
+
+      case "read":
+        await self.set_flag("seen", element.checked ? "DELETE" : "PUT", row.uid);
+        element.checked = !element.checked;
+        break;
+    }
   }
 
   async load_config() {
@@ -242,7 +309,7 @@ class MailClient {
       for (const line of this.mailbox.children) {
         if (line.uid === msg.uid) {
           found = true;
-          await self._mail_row(line, msg);
+          await self._mail_row_fill(line, msg);
           break;
         }
       }
@@ -251,32 +318,16 @@ class MailClient {
         missing_msg.push(msg);
     }
 
+    const template = document.querySelector("#mail-row-template");
     for (const msg of missing_msg) {
-      const row = element("tr");
-      this.mailbox.append(row);
+      const row = await self._mail_row_init(template, msg);
+
       row.uid = msg.uid;
-      await self._mail_row(row, msg);
-
-      row.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        let element = ev.target;
-        while (element && !element.uid) {
-          element = element.parentElement;
-        }
-
-        if (element.uid) {
-          if (self.mail_selected)
-            self.mail_selected.classList.remove("selected");
-
-          self.mail_selected = element;
-          self.mail_selected.classList.add("selected");
-          self.fetch_mail(element.uid);
-        }
-      });
+      await self._mail_row_fill(row, msg);
     }
 
     for (const line of this.mailbox.children) {
-      if (uids.indexOf(line.uid) < 0)
+      if (uids.indexOf(line.uid) < 0 && line !== template)
         line.remove();
     }
   }
@@ -433,14 +484,6 @@ class MailClient {
       self.content_mode = "source";
       self.visibility();
     });
-    document.getElementById("btn-seen").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      self.set_flag("seen", "PUT");
-    });
-    document.getElementById("btn-unseen").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      self.set_flag("seen", "DELETE");
-    });
     document.getElementById("btn-new").addEventListener("click", (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.remove("hidden");
@@ -466,6 +509,10 @@ class MailClient {
     document.getElementById("btn-add-header").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.add_header();
+    });
+    document.querySelector("#color-scheme").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.swap_theme();
     });
 
     await this.load_config();

@@ -6,18 +6,47 @@
   --highlight: #555;
   --special: #469;
 
+  --dark-back: #333;
+  --dark-border: gray;
+  --dark-primary: #ccc;
+  --dark-secondary: #999;
+  --dark-highlight: #555;
+  --dark-special: #469;
+
+  --light-back: white;
+  --light-border: gray;
+  --light-primary: black;
+  --light-secondary: #333;
+  --light-highlight: lightgray;
+
   --slider: 20pt;
   --font-big: 11pt;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --back: white;
-    --border: gray;
-    --primary: black;
-    --secondary: #333;
-    --highlight: lightgray;
+    --back: var(--light-back);
+    --border: var(--light-border);
+    --primary: var(--light-primary);
+    --secondary: var(--light-secondary);
+    --highlight: var(--light-highlight);
   }
+}
+
+:root.light {
+  --back: var(--light-back);
+  --border: var(--light-border);
+  --primary: var(--light-primary);
+  --secondary: var(--light-secondary);
+  --highlight: var(--light-highlight);
+}
+
+:root.dark {
+  --back: var(--dark-back);
+  --border: var(--dark-border);
+  --primary: var(--dark-primary);
+  --secondary: var(--dark-secondary);
+  --highlight: var(--dark-highlight);
 }
 
 html, body {
@@ -31,23 +60,30 @@ body, input, select, textarea, table, #editor {
 }
 
 button {
+  border: 0;
+  border-radius: 0;
   text-transform: capitalize;
 }
 
 #wrapper {
   display: grid;
   height: 100%;
-  grid-row-gap: 10px;
   grid-template-areas: "nav mailbox" "nav header" "nav content";
   grid-template-columns: 200px auto;
-  grid-template-rows: 30% 150px auto;
+  grid-template-rows: 30% max-content auto;
 }
 
 *:focus-visible {outline: none}
 .hidden {display: none !important}
 .highlight {color: var(--special)}
 .selected {background-color: var(--highlight)}
-.unseen {font-weight: bold}
+.unseen .subject {font-weight: bold}
+.italic {font-style: italic}
+.no-overflow {
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 #content {grid-area: content}
 #mailbox {grid-area: mailbox}
@@ -57,6 +93,8 @@ button {
   grid-area: nav;
   border-right: 2px solid var(--border);
 }
+#header {grid-area: header}
+#accounts {padding: 5pt 2pt}
 
 #mailboxes {
   display: block;
@@ -67,25 +105,36 @@ button {
 }
 #mailboxes option {padding: 5px}
 
+#mailbox {
+  overflow-y: scroll;
+}
 #mailbox table {
   border-collapse: collapse;
-  table-layout: fixed;
   width: 100%;
 }
-#mailbox table tr:hover {background-color: var(--highlight)}
-#mailbox table th, #mailbox table td {
-  overflow-x: hidden;
-  text-overflow: ellipsis;
+#mailbox table.additional {
+  background-color: unset;
+}
+#mailbox table.additional td {
+  border: 0;
+}
+#mailbox td.read {
+  text-align: center;
+}
+#mailbox tr:hover {
+  background-color: var(--highlight)
+}
+#mailbox .date, #mailbox .read {
+  padding: 0 4px;
+  text-align: right;
+  width: 1px;
   white-space: nowrap;
 }
-
-#mailbox #mailbox-from, #mailbox #mailbox-to {max-width: 150px; width: 15%}
-#mailbox #mailbox-date {width: 170px}
-#mailbox #mailbox-flags {width: 10%}
 
 #mailbox table th {
   border: 1px solid gray;
   background-color: var(--highlight);
+  text-align: center !important;
 }
 
 #mailbox table td {border: 1px solid var(--border)}
@@ -193,7 +242,7 @@ button {
   min-width: 20px;
 }
 
-#connection {
+.switch {
   background-color: var(--highlight);
   border-bottom: 2px solid var(--border);
   font-size: var(--font-big);
@@ -203,7 +252,7 @@ button {
   position: relative;
 }
 
-#connection label {
+.switch label {
   position: absolute;
   display: inline-block;
   width: 60px;
@@ -211,13 +260,13 @@ button {
   right: 2px;
 }
 
-#connection input {
+.switch input {
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-#connection .slider {
+.switch .slider {
   position: absolute;
   cursor: pointer;
   top: 0;
@@ -229,7 +278,7 @@ button {
   transition: .4s;
 }
 
-#connection .slider:before {
+.switch .slider:before {
   position: absolute;
   content: "";
   height: 12px;
@@ -241,20 +290,16 @@ button {
   transition: .4s;
 }
 
-#connection input:checked + .slider {
+.switch input:checked + .slider {
   background-color: var(--special);
 }
 
-#connection input:focus + .slider {
+.switch input:focus + .slider {
   box-shadow: 0 0 1px var(--special);
 }
 
-#connection input:checked + .slider:before {
+.switch input:checked + .slider:before {
   -webkit-transform: translateX(26px);
   -ms-transform: translateX(26px);
   transform: translateX(26px);
-}
-
-#accounts {
-  padding: 5pt 2pt;
 }

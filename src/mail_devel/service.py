@@ -289,7 +289,7 @@ class Service:
         group.add_argument("--debug", action="store_true", help="Verbose logging")
         group.add_argument(
             "--devel",
-            action="store_true",
+            type=lambda x: utils.valid_file(x, True),
             help="Use files from the working directory instead of the resources for "
             "the HTTP frontend. Useful for own frontends or development",
         )
