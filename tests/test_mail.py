@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
+
 from mail_devel import Service
 from mail_devel import __main__ as main
 
@@ -332,7 +333,9 @@ async def test_mail_devel_smtp_auth_multi_user():
 async def test_mail_devel_imap_auth():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
-    service = await build_test_service(pw, imap_port=iport, smtp_port=sport, no_http=None)
+    service = await build_test_service(
+        pw, imap_port=iport, smtp_port=sport, no_http=None
+    )
 
     await asyncio.sleep(0.2)
     async with service.start():
@@ -376,7 +379,12 @@ async def test_mail_devel_imap_auth_multi_user_mails():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
-        pw, user="test@example.org", imap_port=iport, smtp_port=sport, multi_user=None, no_http=None
+        pw,
+        user="test@example.org",
+        imap_port=iport,
+        smtp_port=sport,
+        multi_user=None,
+        no_http=None,
     )
 
     expectations = [
