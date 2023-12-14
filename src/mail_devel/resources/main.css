@@ -5,6 +5,7 @@
   --secondary: #999;
   --highlight: #555;
   --special: #469;
+  --button: lightgray;
 
   --dark-back: #333;
   --dark-border: gray;
@@ -12,12 +13,14 @@
   --dark-secondary: #999;
   --dark-highlight: #555;
   --dark-special: #469;
+  --dark-button: lightgray;
 
   --light-back: white;
   --light-border: gray;
   --light-primary: black;
   --light-secondary: #333;
   --light-highlight: lightgray;
+  --light-button: gray;
 
   --slider: 20pt;
   --font-big: 11pt;
@@ -30,6 +33,7 @@
     --primary: var(--light-primary);
     --secondary: var(--light-secondary);
     --highlight: var(--light-highlight);
+    --button: var(--light-button);
   }
 }
 
@@ -39,6 +43,7 @@
   --primary: var(--light-primary);
   --secondary: var(--light-secondary);
   --highlight: var(--light-highlight);
+  --button: var(--light-button);
 }
 
 :root.dark {
@@ -47,6 +52,7 @@
   --primary: var(--dark-primary);
   --secondary: var(--dark-secondary);
   --highlight: var(--dark-highlight);
+  --button: var(--dark-button);
 }
 
 html, body {
@@ -59,10 +65,16 @@ body, input, select, textarea, table, #editor {
   color: var(--primary);
 }
 
-button {
+button, .btn {
+  appearance: auto;
+  background-color: var(--button);
+  border-radius: 2px;
   border: 0;
-  border-radius: 0;
+  color: black;
+  font-family: sans-serif;
+  text-align: center;
   text-transform: capitalize;
+  vertical-align: middle;
 }
 
 #wrapper {
@@ -99,6 +111,7 @@ button {
 #mailboxes {
   display: block;
   flex: 1;
+  margin-top: 5px;
   font-size: var(--font-big);
   height: 80%;
   width: 100%;
@@ -177,9 +190,14 @@ button {
 }
 .container textarea {box-sizing: border-box; padding: 5px}
 
-#btn-new {
+#uploader input[type="file"] {
+  display: none;
+}
+
+#btn-new, #uploader {
   font-size: var(--font-big);
   padding: 5pt 2pt;
+  margin: 2px 0;
 }
 #btn-dropdown button {
   cursor: pointer;

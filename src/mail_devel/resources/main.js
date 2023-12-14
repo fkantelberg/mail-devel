@@ -223,6 +223,18 @@ class MailClient {
       this.config = data;
   }
 
+  async upload_files(element) {
+    const files = [];
+    for (const file of element.files) {
+      files.push({name: file.name, data: await file.text()});
+    }
+
+    await this.post_data(files, "upload");
+
+    // Clear the files
+    element.value = null;
+  }
+
   async fetch_accounts() {
     const self = this;
     const data = await this.fetch_data();
@@ -513,6 +525,10 @@ class MailClient {
     document.querySelector("#color-scheme").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.swap_theme();
+    });
+    document.querySelector("#uploader input").addEventListener("change", (ev) => {
+      ev.preventDefault();
+      self.upload_files(ev.target);
     });
 
     await this.load_config();

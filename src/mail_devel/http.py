@@ -1,7 +1,8 @@
 import logging
 import os
 import uuid
-from email import header, message_from_bytes
+from email import header, message_from_bytes, message_from_string, policy
+from email.errors import MessageDefect
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -69,6 +70,7 @@ class Frontend:
                 web.get("/config", self._api_config),
                 web.get(r"/{static:.*\.(css|js)}", self._page_static),
                 web.post(r"/api", self._api_post),
+                web.post(r"/api/upload", self._api_upload),
                 web.get(r"/api", self._api_index),
                 web.get(r"/api/{user}", self._api_user),
                 web.get(r"/api/{user}/{mailbox}", self._api_mailbox),
@@ -181,6 +183,24 @@ class Frontend:
 
         mailboxes = await mailbox.list_mailboxes()
         return web.json_response([e.name for e in mailboxes.list()])
+
+    async def _api_upload(self, request: Request) -> Response:  # pylint: disable=W0613
+        data = await request.json()
+        if not isinstance(data, list):
+            raise web.HTTPBadRequest()
+
+        compat_strict = policy.compat32.clone(raise_on_defect=True)
+        for mail in data:
+            try:
+                msg = message_from_string(mail["data"], policy=compat_strict)
+                await self.mailboxes.append(
+                    msg,
+                    flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+                )
+            except MessageDefect:
+                continue
+
+        return web.json_response({})
 
     async def _api_post(self, request: Request) -> Response:
         data = await request.json()

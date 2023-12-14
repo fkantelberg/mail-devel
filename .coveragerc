@@ -1,3 +1,2 @@
 [run]
-include = */src/*
 omit = *tests*
