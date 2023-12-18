@@ -33,4 +33,4 @@ disable=raw-checker-failed,
         logging-fstring-interpolation,
 
 [IMPORTS]
-ignored-modules=aiohttp,pysasl,pymap,aiosmtpd,pytest,mail_devel
+ignored-modules=aiohttp,nox,pysasl,pymap,aiosmtpd,pytest,mail_devel

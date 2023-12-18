@@ -1,5 +1,6 @@
 import logging
 import os
+import ssl
 import uuid
 from email import header, message_from_bytes, message_from_string, policy
 from email.errors import MessageDefect
@@ -25,6 +26,29 @@ def decode_header(value: str) -> str:
 
 def flags_to_api(flags: frozenset[Flag]) -> list[str]:
     return [f.value.decode().strip("\\").lower() for f in flags]
+
+
+async def run_app(
+    api,
+    host: str | None = None,
+    port: int | None = None,
+    ssl_context: ssl.SSLContext | None = None,
+) -> web.AppRunner:
+    app = web.AppRunner(
+        api,
+        access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
+    )
+    await app.setup()
+
+    site = web.TCPSite(
+        app,
+        host=host,
+        port=port,
+        reuse_address=True,
+        reuse_port=True,
+        ssl_context=ssl_context,
+    )
+    await site.start()
 
 
 class Frontend:
@@ -90,14 +114,10 @@ class Frontend:
             ]
         )
 
-        return await web._run_app(
+        return await run_app(
             self.api,
             host=self.host or None,
             port=self.port,
-            access_log_format='%a "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
-            reuse_address=True,
-            reuse_port=True,
-            print=lambda *x: None,
         )
 
     async def _page_index(self, request: Request) -> Response:  # pylint: disable=W0613
