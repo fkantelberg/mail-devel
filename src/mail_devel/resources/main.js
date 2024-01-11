@@ -177,11 +177,13 @@ class MailClient {
 
     row.querySelector(".read input").addEventListener("click", (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       self._mail_row_click(ev.target, "read");
     });
 
     row.addEventListener("click", (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       self._mail_row_click(ev.target, "swap");
     });
 
@@ -211,7 +213,7 @@ class MailClient {
         break;
 
       case "read":
-        await self.set_flag("seen", element.checked ? "DELETE" : "PUT", row.uid);
+        await self.set_flag("seen", element.checked ? "PUT" : "DELETE", row.uid);
         element.checked = !element.checked;
         break;
     }

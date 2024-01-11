@@ -119,6 +119,7 @@ button, .btn {
 #mailboxes option {padding: 5px}
 
 #mailbox {
+  overflow-x: auto;
   overflow-y: scroll;
 }
 #mailbox table {
