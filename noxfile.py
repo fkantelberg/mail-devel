@@ -10,6 +10,8 @@ def clean(session):
 @nox.session()
 def py3(session):
     session.install(
+        "-e",
+        ".",
         "pytest",
         "pytest-asyncio",
         "pytest-cov",
@@ -17,12 +19,11 @@ def py3(session):
         "pytest-timeout",
         "coverage",
     )
-    session.install(".")
     session.run(
         "pytest",
         "-n=5",
-        "--cov-append",
         "--cov=src/mail_devel",
+        "--cov-append",
         "--asyncio-mode=auto",
         "--timeout=5",
     )

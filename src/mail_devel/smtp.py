@@ -19,12 +19,11 @@ class MemoryHandler(AsyncMessage):
         multi_user: bool = False,
     ):
         super().__init__(message_class)
-        self.mailboxes = mailboxes
-        self.flagged_seen = flagged_seen
-        self.multi_user = multi_user
+        self.mailboxes: TestMailboxDict = mailboxes
+        self.flagged_seen: bool = flagged_seen
+        self.multi_user: bool = multi_user
 
     def prepare_message(self, session, envelope):
-        _logger.info(envelope.content)
         if envelope.smtp_utf8 and isinstance(envelope.content, (bytes, bytearray)):
             data = envelope.content
             try:

@@ -96,20 +96,30 @@ class Frontend:
                 web.post(r"/api", self._api_post),
                 web.post(r"/api/upload", self._api_upload),
                 web.get(r"/api", self._api_index),
-                web.get(r"/api/{user}", self._api_user),
-                web.get(r"/api/{user}/{mailbox}", self._api_mailbox),
-                web.get(r"/api/{user}/{mailbox}/{uid:\d+}", self._api_message),
-                web.get(r"/api/{user}/{mailbox}/{uid:\d+}/reply", self._api_reply),
+                web.get(r"/api/{account:\d+}", self._api_account),
+                web.get(r"/api/{account:\d+}/{mailbox:\d+}", self._api_mailbox),
                 web.get(
-                    r"/api/{user}/{mailbox}/{uid:\d+}/attachment/{attachment}",
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}",
+                    self._api_message,
+                ),
+                web.get(
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/reply",
+                    self._api_reply,
+                ),
+                web.get(
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/attachment/{attachment}",
                     self._api_attachment,
                 ),
-                web.get(r"/api/{user}/{mailbox}/{uid:\d+}/flags", self._api_flag),
+                web.get(
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags", self._api_flag
+                ),
                 web.put(
-                    r"/api/{user}/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag}",
+                    self._api_flag,
                 ),
                 web.delete(
-                    r"/api/{user}/{mailbox}/{uid:\d+}/flags/{flag}", self._api_flag
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag}",
+                    self._api_flag,
                 ),
             ]
         )
@@ -191,18 +201,22 @@ class Frontend:
         )
 
     async def _api_index(self, request: Request) -> Response:  # pylint: disable=W0613
-        mailboxes = await self.mailboxes.list()
-        return web.json_response(mailboxes)
+        accounts = await self.mailboxes.list()
+        return web.json_response(
+            {self.mailboxes.id_of_user(user): user for user in accounts}
+        )
 
-    async def _api_user(self, request: Request) -> Response:  # pylint: disable=W0613
+    async def _api_account(self, request: Request) -> Response:  # pylint: disable=W0613
         try:
-            user = request.match_info["user"]
-            mailbox = self.mailboxes[user]
+            account_id = int(request.match_info["account"])
+            account = await self.mailboxes.get_by_id(account_id)
         except KeyError as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
-        mailboxes = await mailbox.list_mailboxes()
-        return web.json_response([e.name for e in mailboxes.list()])
+        mailboxes = await account.list_mailboxes()
+        return web.json_response(
+            {account.id_of_mailbox(e.name): e.name for e in mailboxes.list()}
+        )
 
     async def _api_upload(self, request: Request) -> Response:  # pylint: disable=W0613
         data = await request.json()
@@ -256,9 +270,10 @@ class Frontend:
 
     async def _api_mailbox(self, request: Request) -> Response:
         try:
-            user = request.match_info["user"]
-            name = request.match_info["mailbox"]
-            mailbox = await self.mailboxes[user].get_mailbox(name)
+            account_id = int(request.match_info["account"])
+            account = self.mailboxes.user_mapping[account_id]
+            mailbox_id = int(request.match_info["mailbox"])
+            mailbox = await self.mailboxes[account].get_mailbox_by_id(mailbox_id)
         except KeyError as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -270,10 +285,11 @@ class Frontend:
 
     async def _api_message(self, request: Request) -> Response:
         try:
-            user = request.match_info["user"]
-            name = request.match_info["mailbox"]
+            account_id = int(request.match_info["account"])
+            account = self.mailboxes.user_mapping[account_id]
+            mailbox_id = int(request.match_info["mailbox"])
             uid = int(request.match_info["uid"])
-            mailbox = await self.mailboxes[user].get_mailbox(name)
+            mailbox = await self.mailboxes[account].get_mailbox_by_id(mailbox_id)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -285,10 +301,11 @@ class Frontend:
 
     async def _api_reply(self, request: Request) -> Response:
         try:
-            user = request.match_info["user"]
-            name = request.match_info["mailbox"]
+            account_id = int(request.match_info["account"])
+            mailbox_id = int(request.match_info["mailbox"])
             uid = int(request.match_info["uid"])
-            mailbox = await self.mailboxes[user].get_mailbox(name)
+            account = await self.mailboxes.get_by_id(account_id)
+            mailbox = await account.get_mailbox_by_id(mailbox_id)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -314,11 +331,12 @@ class Frontend:
 
     async def _api_attachment(self, request: Request) -> Response:
         try:
-            user = request.match_info["user"]
-            name = request.match_info["mailbox"]
+            account_id = int(request.match_info["account"])
+            mailbox_id = int(request.match_info["mailbox"])
             uid = int(request.match_info["uid"])
             attachment = request.match_info["attachment"]
-            mailbox = await self.mailboxes[user].get_mailbox(name)
+            account = await self.mailboxes.get_by_id(account_id)
+            mailbox = await account.get_mailbox_by_id(mailbox_id)
         except (IndexError, KeyError) as e:  # pragma: no cover
             raise web.HTTPNotFound() from e
 
@@ -350,9 +368,10 @@ class Frontend:
 
     async def _api_flag(self, request: Request) -> Response:
         try:
-            user = request.match_info["user"]
-            name = request.match_info["mailbox"]
-            mailbox = await self.mailboxes[user].get_mailbox(name)
+            account_id = int(request.match_info["account"])
+            mailbox_id = int(request.match_info["mailbox"])
+            account = await self.mailboxes.get_by_id(account_id)
+            mailbox = await account.get_mailbox_by_id(mailbox_id)
             uid = int(request.match_info["uid"])
 
             if request.method in ("DELETE", "PUT"):

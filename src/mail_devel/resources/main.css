@@ -144,6 +144,13 @@ button, .btn {
   width: 1px;
   white-space: nowrap;
 }
+#mailbox .ordering {
+  display: inline-block;
+  vertical-align: text-top;
+  width: 12pt;
+}
+#mailbox .ordering.asc:before {content: "\25B4"}
+#mailbox .ordering.desc:before {content: "\25BC"}
 
 #mailbox table th {
   border: 1px solid gray;

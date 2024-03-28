@@ -36,8 +36,8 @@ class MailClient {
     this.mailboxes = document.getElementById("mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
     this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
-    this.user_name = null;
-    this.mailbox_name = null;
+    this.user_id = null;
+    this.mailbox_id = null;
     this.mail_uid = null;
     this.mail_selected = null;
     this.content_mode = "html";
@@ -51,6 +51,8 @@ class MailClient {
       toggle.checked = true
     else
       toggle.checked = false
+
+    this.reorder(false);
   }
 
   async swap_theme() {
@@ -91,8 +93,8 @@ class MailClient {
         if (this.user_name)
           await this.fetch_mailboxes(this.user_name);
 
-        if (this.mailbox_name)
-          await this.fetch_mailbox(this.mailbox_name);
+        if (this.mailbox_id)
+          await this.fetch_mailbox(this.mailbox_id);
     }
 
     setTimeout(() => {self.idle();}, 2000);
@@ -100,9 +102,9 @@ class MailClient {
 
   async set_flag(flag, method, uid = null) {
     const mail_uid = uid || this.mail_uid;
-    if (this.mailbox_name && mail_uid) {
+    if (this.mailbox_id && mail_uid) {
       await fetch(
-        `/api/${this.user_name}/${this.mailbox_name}/${mail_uid}/flags/seen`,
+        `/api/${this.user_id}/${this.mailbox_id}/${mail_uid}/flags/seen`,
         {method: method},
       );
     }
@@ -173,7 +175,6 @@ class MailClient {
     const row = template.cloneNode(10);
     row.removeAttribute("id");
     row.classList.remove("hidden");
-    this.mailbox.append(row);
 
     row.querySelector(".read input").addEventListener("click", (ev) => {
       ev.preventDefault();
@@ -244,15 +245,15 @@ class MailClient {
       return;
 
     for (const opt of this.users.options) {
-      const idx = data.indexOf(opt.value);
-      if (idx >= 0)
-        data.splice(idx, 1);
+      const user = data[opt.value];
+      if (user !== undefined)
+        delete data[opt.value];
       else
         opt.remove();
     }
 
-    for (const user of data)
-      this.users.add(new Option(user, user));
+    for (const uid in data)
+      this.users.add(new Option(data[uid], uid));
 
     if (this.users.selectedIndex < 0) {
       this.users.selectedIndex = 0;
@@ -261,37 +262,37 @@ class MailClient {
       }
     } else {
       const selected = this.users.options[this.users.selectedIndex].value;
-      if (this.user_name !== selected) {
+      if (this.user_id !== selected) {
         await self.fetch_mailboxes(selected);
       }
     }
   }
 
-  async fetch_mailboxes(user_name) {
+  async fetch_mailboxes(user_id) {
     const self = this;
-    const data = await this.fetch_data(user_name);
+    const data = await this.fetch_data(user_id);
     if (data === null)
       return;
 
-    if (this.user_name !== user_name) {
-      this.mailbox_name = null;
+    if (this.user_id !== user_id) {
+      this.mailbox_id = null;
       this.mail_uid = null;
       this.mailbox.innerHTML = "";
       this.mailboxes.selectedIndex = -1;
     }
 
-    this.user_name = user_name;
+    this.user_id = user_id;
 
     for (const opt of this.mailboxes.options) {
-      const idx = data.indexOf(opt.value);
-      if (idx >= 0)
+      const name = data[opt.uid];
+      if (name)
         data.splice(idx, 1);
       else
         opt.remove()
     }
 
-    for (const mailbox of data) {
-      this.mailboxes.add(new Option(mailbox, mailbox));
+    for (const uid in data) {
+      this.mailboxes.add(new Option(data[uid], uid, true, this.mailbox_id === uid));
     }
 
     if (this.mailboxes.selectedIndex < 0) {
@@ -302,20 +303,21 @@ class MailClient {
     }
   }
 
-  async fetch_mailbox(mailbox_name) {
+  async fetch_mailbox(mailbox_id) {
     const self = this;
-    const data = await this.fetch_data(this.user_name, mailbox_name);
+    const data = await this.fetch_data(this.user_id, mailbox_id);
     if (data === null)
       return;
 
-    if (this.mailbox_name !== mailbox_name) {
+    if (this.mailbox_id !== mailbox_id) {
       this.mail_uid = null;
       this.mailbox.innerHTML = "";
     }
 
-    this.mailbox_name = mailbox_name;
+    this.mailbox_id = mailbox_id;
     const missing_msg = [];
     const uids = [];
+    const lines = [];
     for (const msg of data) {
       uids.push(msg.uid);
 
@@ -324,6 +326,7 @@ class MailClient {
         if (line.uid === msg.uid) {
           found = true;
           await self._mail_row_fill(line, msg);
+          lines.push(line);
           break;
         }
       }
@@ -338,17 +341,22 @@ class MailClient {
 
       row.uid = msg.uid;
       await self._mail_row_fill(row, msg);
+      lines.push(row);
     }
 
-    for (const line of this.mailbox.children) {
+    for (const line of lines) {
       if (uids.indexOf(line.uid) < 0 && line !== template)
         line.remove();
     }
+
+    if (this.sort_asc) lines.reverse();
+    for (const line of lines)
+      this.mailbox.append(line);
   }
 
   async fetch_mail(uid) {
     const self = this;
-    const data = await this.fetch_data(this.user_name, this.mailbox_name, uid);
+    const data = await this.fetch_data(this.user_id, this.mailbox_id, uid);
     if (data === null)
       return;
 
@@ -368,7 +376,7 @@ class MailClient {
 
     for (const attachment of data?.attachments || []) {
       const link = document.createElement("a");
-      link.href = `/api/${this.user_name}/${this.mailbox_name}/${uid}/attachment/${attachment}`;
+      link.href = `/api/${this.user_id}/${this.mailbox_id}/${uid}/attachment/${attachment}`;
       link.innerHTML = attachment;
       dropdown.append(link);
     }
@@ -408,6 +416,23 @@ class MailClient {
     await this.visibility();
   }
 
+  async reorder(asc) {
+    this.sort_asc = asc;
+
+    const element = document.querySelector("#mailbox .date .ordering");
+    if (!element) return;
+
+    if (this.sort_asc) {
+      element.classList.add("asc");
+      element.classList.remove("desc");
+    } else {
+      element.classList.add("desc");
+      element.classList.remove("asc");
+    }
+
+    if (this.mailbox_id) await this.fetch_mailbox(this.mailbox_id);
+  }
+
   async send_mail() {
     const headers = {};
     for (const key of this.fixed_headers)
@@ -445,11 +470,11 @@ class MailClient {
   }
 
   async reply_mail() {
-    if (!this.mailbox_name || !this.mail_uid)
+    if (!this.mailbox_id || !this.mail_uid)
       return;
 
     const data = await this.fetch_data(
-      this.user_name, this.mailbox_name, this.mail_uid, "reply"
+      this.user_id, this.mailbox_id, this.mail_uid, "reply"
     );
     if (data === null)
       return;
@@ -531,6 +556,10 @@ class MailClient {
     document.querySelector("#uploader input").addEventListener("change", (ev) => {
       ev.preventDefault();
       self.upload_files(ev.target);
+    });
+    document.querySelector("#mailbox .date").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.reorder(!self.sort_asc);
     });
 
     await this.load_config();

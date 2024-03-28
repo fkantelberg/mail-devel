@@ -14,6 +14,23 @@ _logger = logging.getLogger(__name__)
 class TestMailboxSet(MailboxSet):
     """This MailboxSet creates the mailboxes automatically"""
 
+    def __init__(self):
+        super().__init__()
+        self.mailbox_mapping: dict[int, str] = {}
+
+    def id_of_mailbox(self, name: str) -> int:
+        for mailbox_id, mailbox_name in self.mailbox_mapping.items():
+            if mailbox_name == name:
+                return mailbox_id
+
+        new_id = len(self.mailbox_mapping) + 1
+        self.mailbox_mapping[new_id] = name
+        return new_id
+
+    async def get_mailbox_by_id(self, mailbox_id: int) -> MailboxData:
+        mailbox_name = self.mailbox_mapping[mailbox_id]
+        return await self.get_mailbox(mailbox_name)
+
     async def get_mailbox(self, name: str) -> MailboxData:
         if name not in self._set:
             await self.add_mailbox(name)
@@ -26,15 +43,25 @@ class TestMailboxDict:
     def __init__(
         self, config: IMAPConfig, filter_set: FilterSet, multi_user: bool = False
     ):
-        self.config = config
-        self.filter_set = filter_set
-        self.multi_user = multi_user
+        self.config: IMAPConfig = config
+        self.filter_set: FilterSet = filter_set
+        self.multi_user: bool = multi_user
+        self.user_mapping: dict[int, str] = {}
 
     def __contains__(self, user: str) -> bool:
         return not self.multi_user or user in self.config.set_cache
 
     def __getitem__(self, user: str) -> TestMailboxSet:
         return self.config.set_cache[user][0]
+
+    def id_of_user(self, name: str) -> int:
+        for uid, user_name in self.user_mapping.items():
+            if user_name == name:
+                return uid
+
+        new_id = len(self.user_mapping) + 1
+        self.user_mapping[new_id] = name
+        return new_id
 
     async def inbox_stats(self) -> dict[str, int]:
         stats = {}
@@ -49,6 +76,13 @@ class TestMailboxDict:
             await self.get(self.config.demo_user)
 
         return list(self.config.set_cache)
+
+    async def get_by_id(self, user_id: int) -> TestMailboxSet:
+        if not self.multi_user:
+            return await self.get(self.config.demo_user)
+
+        user_name = self.user_mapping[user_id]
+        return await self.get(user_name)
 
     async def get(self, user: str) -> TestMailboxSet:
         """Get the mailbox for the user or the main mailbox if single user mode"""

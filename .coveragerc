@@ -1,2 +1,4 @@
 [run]
-omit = *tests*
+source = */mail_devel/*
+concurrency = multiprocessing
+parallel = True

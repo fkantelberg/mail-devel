@@ -103,8 +103,11 @@ async def prepare_http_test():
         pw, imap_port=imap_port, smtp_port=smtp_port, http_port=http_port
     )
     account = await service.mailboxes.get(service.demo_user)
+    service.mailboxes.id_of_user(service.demo_user)
     mailbox = await account.get_mailbox("INBOX")
+    account.id_of_mailbox("INBOX")
     await account.get_mailbox("SENT")
+    account.id_of_mailbox("INBOX")
 
     assert service.frontend.load_resource("index.html")
     assert service.frontend.load_resource("main.css")
@@ -167,40 +170,40 @@ async def test_mail_devel_http():
             assert response.status == 200
             users = await response.json()
             assert len(users) == 1
-            assert service.demo_user in users
+            assert service.demo_user in users.values()
 
-        async with session.get(f"/api/{service.demo_user}") as response:
+        async with session.get("/api/1") as response:
             assert response.status == 200
             users = await response.json()
             assert len(users) == 2
-            assert "INBOX" in users
+            assert "INBOX" in users.values()
 
-        async with session.get(f"/api/{service.demo_user}/INBOX") as response:
+        async with session.get("/api/1/1") as response:
             assert response.status == 200
             mbox = await response.json()
             assert len(mbox) == 1
             assert mbox[0]["uid"] == 101
 
-        async with session.get(f"/api/{service.demo_user}/INBOX/101") as response:
+        async with session.get("/api/1/1/101") as response:
             assert response.status == 200
             msg = await response.json()
             assert msg
             assert msg["attachments"]
 
-        async with session.get(f"/api/{service.demo_user}/INBOX/999") as response:
+        async with session.get("/api/1/1/999") as response:
             assert response.status == 404
 
 
 @pytest.mark.asyncio
 async def test_mail_devel_http_reply():
-    async with prepare_http_test() as (session, service):
-        async with session.get(f"/api/{service.demo_user}/INBOX/101/reply") as response:
+    async with prepare_http_test() as (session, _service):
+        async with session.get("/api/1/1/101/reply") as response:
             assert response.status == 200
             msg = await response.json()
             assert msg["header"]["to"] == "test <test@example.org>"
             assert msg["header"]["message-id"].endswith("@mail-devel")
 
-        async with session.get(f"/api/{service.demo_user}/INBOX/999/reply") as response:
+        async with session.get("/api/1/1/999/reply") as response:
             assert response.status == 404
 
         msg.update(
@@ -224,7 +227,7 @@ async def test_mail_devel_http_reply():
         async with session.post("/api", json=[]) as response:
             assert response.status == 400
 
-        async with session.get(f"/api/{service.demo_user}/INBOX") as response:
+        async with session.get("/api/1/1") as response:
             assert response.status == 200
             mbox = await response.json()
             assert len(mbox) == 2
@@ -232,50 +235,39 @@ async def test_mail_devel_http_reply():
 
 @pytest.mark.asyncio
 async def test_mail_devel_http_flagging():
-    async with prepare_http_test() as (session, service):
-        async with session.get(f"/api/{service.demo_user}/INBOX/101/flags") as response:
+    async with prepare_http_test() as (session, _service):
+        async with session.get("/api/1/1/101/flags") as response:
             assert response.status == 200
             assert await response.json() == []
 
-        async with session.put(
-            f"/api/{service.demo_user}/INBOX/101/flags/unseen"
-        ) as response:
+        async with session.put("/api/1/1/101/flags/unseen") as response:
             assert response.status == 200
             assert await response.json() == ["unseen"]
 
-        async with session.get(f"/api/{service.demo_user}/INBOX/101/flags") as response:
+        async with session.get("/api/1/1/101/flags") as response:
             assert response.status == 200
             assert await response.json() == ["unseen"]
 
-        async with session.delete(
-            f"/api/{service.demo_user}/INBOX/101/flags/unseen"
-        ) as response:
+        async with session.delete("/api/1/1/101/flags/unseen") as response:
             assert response.status == 200
             assert await response.json() == []
 
-        async with session.put(
-            f"/api/{service.demo_user}/INBOX/999/flags/unseen"
-        ) as response:
+        async with session.put("/api/1/1/999/flags/unseen") as response:
             assert response.status == 404
 
 
 @pytest.mark.asyncio
 async def test_mail_devel_http_attachment():
-    async with prepare_http_test() as (session, service):
-        async with session.get(
-            f"/api/{service.demo_user}/INBOX/101/attachment/att abc.txt"
-        ) as response:
+    async with prepare_http_test() as (session, _service):
+        print(_service.mailboxes.user_mapping)
+        async with session.get("/api/1/1/101/attachment/att abc.txt") as response:
             assert response.status == 200
             assert await response.text() == "hello world"
 
-        async with session.get(
-            f"/api/{service.demo_user}/INBOX/101/attachment/unknown.txt"
-        ) as response:
+        async with session.get("/api/1/1/101/attachment/unknown.txt") as response:
             assert response.status == 404
 
-        async with session.get(
-            f"/api/{service.demo_user}/INBOX/999/attachment/att abc.txt"
-        ) as response:
+        async with session.get("/api/1/1/999/attachment/att abc.txt") as response:
             assert response.status == 404
 
 
