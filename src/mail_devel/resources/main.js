@@ -232,7 +232,7 @@ class MailClient {
       files.push({name: file.name, data: await file.text()});
     }
 
-    await this.post_data(files, "upload");
+    await this.post_data(files, "upload", this.user_id, this.mailbox_id);
 
     // Clear the files
     element.value = null;
@@ -463,7 +463,7 @@ class MailClient {
       header: headers,
       body: document.querySelector("#editor-content textarea").value,
       attachments: attachments,
-    });
+    }, this.user_id, this.mailbox_id);
 
     document.querySelector("#editor").classList.add("hidden");
     await this.reset_editor();

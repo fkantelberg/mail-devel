@@ -93,8 +93,8 @@ class Frontend:
                 web.get("/", self._page_index),
                 web.get("/config", self._api_config),
                 web.get(r"/{static:.*\.(css|js)}", self._page_static),
-                web.post(r"/api", self._api_post),
-                web.post(r"/api/upload", self._api_upload),
+                web.post(r"/api/{account:\d+}/{mailbox:\d+}", self._api_post),
+                web.post(r"/api/upload/{account:\d+}/{mailbox:\d+}", self._api_upload),
                 web.get(r"/api", self._api_index),
                 web.get(r"/api/{account:\d+}", self._api_account),
                 web.get(r"/api/{account:\d+}/{mailbox:\d+}", self._api_mailbox),
@@ -219,6 +219,14 @@ class Frontend:
         )
 
     async def _api_upload(self, request: Request) -> Response:  # pylint: disable=W0613
+        try:
+            account_id = int(request.match_info["account"])
+            account = self.mailboxes.user_mapping[account_id]
+            mailbox_id = int(request.match_info["mailbox"])
+            mailbox = self.mailboxes[account].get_mailbox_name(mailbox_id)
+        except KeyError as e:  # pragma: no cover
+            raise web.HTTPNotFound() from e
+
         data = await request.json()
         if not isinstance(data, list):
             raise web.HTTPBadRequest()
@@ -230,6 +238,7 @@ class Frontend:
                 await self.mailboxes.append(
                     msg,
                     flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+                    mailbox=mailbox,
                 )
             except MessageDefect:
                 continue
@@ -237,6 +246,14 @@ class Frontend:
         return web.json_response({})
 
     async def _api_post(self, request: Request) -> Response:
+        try:
+            account_id = int(request.match_info["account"])
+            account = self.mailboxes.user_mapping[account_id]
+            mailbox_id = int(request.match_info["mailbox"])
+            mailbox = self.mailboxes[account].get_mailbox_name(mailbox_id)
+        except KeyError as e:  # pragma: no cover
+            raise web.HTTPNotFound() from e
+
         data = await request.json()
         if not isinstance(data, dict):
             raise web.HTTPBadRequest()
@@ -265,6 +282,7 @@ class Frontend:
         await self.mailboxes.append(
             message,
             flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+            mailbox=mailbox,
         )
         return web.json_response({"status": "ok"})
 

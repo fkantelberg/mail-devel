@@ -31,6 +31,9 @@ class TestMailboxSet(MailboxSet):
         mailbox_name = self.mailbox_mapping[mailbox_id]
         return await self.get_mailbox(mailbox_name)
 
+    def get_mailbox_name(self, mailbox_id: int) -> str:
+        return self.mailbox_mapping[mailbox_id]
+
     async def get_mailbox(self, name: str) -> MailboxData:
         if name not in self._set:
             await self.add_mailbox(name)
@@ -95,7 +98,9 @@ class TestMailboxDict:
             self.config.set_cache[user] = mbox, self.filter_set
         return self.config.set_cache[user][0]
 
-    async def append(self, message: Message, flags: frozenset[Flag]) -> None:
+    async def append(
+        self, message: Message, flags: frozenset[Flag], mailbox: str = "INBOX"
+    ) -> None:
         """Push the message to the correct mailbox"""
 
         # Strip BCC header and collect the mail addresses
@@ -115,12 +120,12 @@ class TestMailboxDict:
 
         if not self.multi_user:
             account = await self.get(self.config.demo_user)
-            mailbox = await account.get_mailbox("INBOX")
+            mailbox = await account.get_mailbox(mailbox)
             await mailbox.append(append_msg)
             return
 
         for _, address in getaddresses(list(addresses)):
             if address:
                 mailbox = await self.get(address)
-                mbox = await mailbox.get_mailbox("INBOX")
+                mbox = await mailbox.get_mailbox(mailbox)
                 await mbox.append(append_msg)
