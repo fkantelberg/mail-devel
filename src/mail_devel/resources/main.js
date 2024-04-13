@@ -303,6 +303,17 @@ class MailClient {
     }
   }
 
+  _display_mail(data) {
+    document.querySelector("#header-from input").value = data?.header?.from || "";
+    document.querySelector("#header-to input").value = data?.header?.to || "";
+    document.querySelector("#header-cc input").value = data?.header?.cc || "";
+    document.querySelector("#header-bcc input").value = data?.header?.bcc || "";
+    document.querySelector("#header-subject input").value = data?.header?.subject || "";
+    document.querySelector("#content textarea#source").value = data?.content || "";
+    document.querySelector("#content textarea#plain").value = data?.body_plain || "";
+    document.querySelector("#content iframe#html").srcdoc = data?.body_html || "";
+  }
+
   async fetch_mailbox(mailbox_id) {
     const self = this;
     const data = await this.fetch_data(this.user_id, mailbox_id);
@@ -312,6 +323,9 @@ class MailClient {
     if (this.mailbox_id !== mailbox_id) {
       this.mail_uid = null;
       this.mailbox.innerHTML = "";
+
+      // on change of mailbox, do clear mail display
+      this._display_mail(undefined);
     }
 
     this.mailbox_id = mailbox_id;
@@ -362,14 +376,7 @@ class MailClient {
 
     self.mail_uid = uid;
 
-    document.querySelector("#header-from input").value = data?.header?.from || "";
-    document.querySelector("#header-to input").value = data?.header?.to || "";
-    document.querySelector("#header-cc input").value = data?.header?.cc || "";
-    document.querySelector("#header-bcc input").value = data?.header?.bcc || "";
-    document.querySelector("#header-subject input").value = data?.header?.subject || "";
-    document.querySelector("#content textarea#source").value = data?.content || "";
-    document.querySelector("#content textarea#plain").value = data?.body_plain || "";
-    document.querySelector("#content iframe#html").srcdoc = data?.body_html || "";
+    self._display_mail(data);
 
     const dropdown = document.querySelector("#btn-dropdown div");
     dropdown.innerHTML = "";
