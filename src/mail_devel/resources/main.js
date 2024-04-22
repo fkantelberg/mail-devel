@@ -159,6 +159,14 @@ class MailClient {
       row.querySelector("td.read input").checked = true;
     }
 
+    if ((msg?.flags || []).indexOf("deleted") < 0) {
+      row.classList.remove("is_deleted");
+      row.querySelector("td.deleted input").checked = false;
+    } else {
+      row.classList.add("is_deleted");
+      row.querySelector("td.deleted input").checked = true;
+    }
+
     function content(selector, val) {
       row.querySelector(selector).innerHTML = (val || "").replace("<", "&lt;");
     }

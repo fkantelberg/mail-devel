@@ -90,6 +90,7 @@ button, .btn {
 .highlight {color: var(--special)}
 .selected {background-color: var(--highlight)}
 .unseen .subject {font-weight: bold}
+.is_deleted .subject {font-style: italic}
 .italic {font-style: italic}
 .no-overflow {
   overflow-x: hidden;
@@ -132,13 +133,13 @@ button, .btn {
 #mailbox table.additional td {
   border: 0;
 }
-#mailbox td.read {
+#mailbox td.read, #mailbox td.deleted {
   text-align: center;
 }
 #mailbox tr:hover {
   background-color: var(--highlight)
 }
-#mailbox .date, #mailbox .read {
+#mailbox .date, #mailbox .read, #mailbox .deleted {
   padding: 0 4px;
   text-align: right;
   width: 1px;
