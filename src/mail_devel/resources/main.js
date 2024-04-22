@@ -190,6 +190,12 @@ class MailClient {
       self._mail_row_click(ev.target, "read");
     });
 
+    row.querySelector(".deleted input").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      self._mail_row_click(ev.target, "deleted");
+    });
+
     row.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -223,6 +229,11 @@ class MailClient {
 
       case "read":
         await self.set_flag("seen", element.checked ? "PUT" : "DELETE", row.uid);
+        element.checked = !element.checked;
+        break;
+
+      case "deleted":
+        await self.set_flag("deleted", element.checked ? "PUT" : "DELETE", row.uid);
         element.checked = !element.checked;
         break;
     }
