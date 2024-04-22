@@ -104,7 +104,7 @@ class MailClient {
     const mail_uid = uid || this.mail_uid;
     if (this.mailbox_id && mail_uid) {
       await fetch(
-        `/api/${this.user_id}/${this.mailbox_id}/${mail_uid}/flags/seen`,
+        `/api/${this.user_id}/${this.mailbox_id}/${mail_uid}/flags/${flag}`,
         {method: method},
       );
     }
