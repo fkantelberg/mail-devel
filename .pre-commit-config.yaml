@@ -1,19 +1,9 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4
     hooks:
-      - id: black
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 3.7.9
-    hooks:
-      - id: flake8
-        additional_dependencies: [flake8-bugbear]
-
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.11.5
-    hooks:
-      - id: isort
+      - id: ruff
+      - id: ruff-format
 
   - repo: https://github.com/pylint-dev/pylint
     rev: v2.17.4

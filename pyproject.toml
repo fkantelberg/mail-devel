@@ -2,10 +2,20 @@
 requires = [ "setuptools >= 35.0.2", "wheel >= 0.29.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py37', 'py38', 'py39', 'py310', 'py311', 'py312']
-include = '(\.pyi?$|src|tests)'
+indent-width = 4
+target-version = 'py38'
+
+[tool.ruff.lint]
+ignore = ["E203", "E266", "E501", "F403", "F401"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.mypy]
 disable_error_code = 'attr-defined,import,union-attr'
