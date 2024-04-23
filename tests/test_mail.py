@@ -218,13 +218,13 @@ async def test_mail_devel_http_reply():
                 ],
             }
         )
-        async with session.post("/api", json=msg) as response:
+        async with session.post("/api/1/1", json=msg) as response:
             assert response.status == 200
 
-        async with session.post("/api", json={}) as response:
+        async with session.post("/api/1/1", json={}) as response:
             assert response.status == 400
 
-        async with session.post("/api", json=[]) as response:
+        async with session.post("/api/1/1", json=[]) as response:
             assert response.status == 400
 
         async with session.get("/api/1/1") as response:

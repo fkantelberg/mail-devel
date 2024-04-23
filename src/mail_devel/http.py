@@ -114,11 +114,11 @@ class Frontend:
                     r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags", self._api_flag
                 ),
                 web.put(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag}",
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag:[a-z]+}",
                     self._api_flag,
                 ),
                 web.delete(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag}",
+                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag:[a-z]+}",
                     self._api_flag,
                 ),
             ]

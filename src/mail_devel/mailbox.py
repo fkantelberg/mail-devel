@@ -120,12 +120,12 @@ class TestMailboxDict:
 
         if not self.multi_user:
             account = await self.get(self.config.demo_user)
-            mailbox = await account.get_mailbox(mailbox)
-            await mailbox.append(append_msg)
+            mailboxset = await account.get_mailbox(mailbox)
+            await mailboxset.append(append_msg)
             return
 
         for _, address in getaddresses(list(addresses)):
             if address:
-                mailbox = await self.get(address)
-                mbox = await mailbox.get_mailbox(mailbox)
+                mailboxset = await self.get(address)
+                mbox = await mailboxset.get_mailbox(mailbox)
                 await mbox.append(append_msg)
