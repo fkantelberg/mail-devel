@@ -75,7 +75,7 @@ class TestMailboxDict:
 
     async def list(self):
         """List the available mailbox accounts"""
-        if not self.multi_user and not self.config.set_cache:
+        if not self.config.set_cache:
             await self.get(self.config.demo_user)
 
         return list(self.config.set_cache)

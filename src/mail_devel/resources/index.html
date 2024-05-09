@@ -14,28 +14,32 @@
     <div id="nav" class="container">
       <div id="logo">mail<span class="highlight">devel</span></div>
 
-      <div id="connection" class="switch">
-        <strong>Connection:</strong>
-        <label>
-          <input type="checkbox" checked="checked">
-          <span class="slider"></span>
-        </label>
-      </div>
+      <div id="nav-options">
+        <div id="connection" class="switch">
+          <strong>Connection:</strong>
+          <label>
+            <input type="checkbox" checked="checked">
+            <span class="slider"></span>
+          </label>
+        </div>
 
-      <div id="color-scheme" class="switch">
-        <strong>Color Scheme:</strong>
-        <label>
-          <input type="checkbox" checked="checked">
-          <span class="slider"></span>
-        </label>
+        <div id="color-scheme" class="switch">
+          <strong>Color Scheme:</strong>
+          <label>
+            <input type="checkbox" checked="checked">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
 
       <select id="accounts" name="accounts"></select>
+
       <button id="btn-new" type="button">Send Mail</button>
       <label id="uploader" class="btn">
         <div>Upload Mail</div>
         <input type="file" multiple="multiple"/>
       </label>
+
       <select id="mailboxes" name="mailboxes" multiple="multiple">
       </select>
     </div>

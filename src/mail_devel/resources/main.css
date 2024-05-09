@@ -81,7 +81,7 @@ button, .btn {
   display: grid;
   height: 100%;
   grid-template-areas: "nav mailbox" "nav header" "nav content";
-  grid-template-columns: 200px auto;
+  grid-template-columns: 250px auto;
   grid-template-rows: 30% max-content auto;
 }
 
@@ -104,24 +104,32 @@ button, .btn {
   display: flex;
   flex-direction: column;
   grid-area: nav;
-  border-right: 2px solid var(--border);
+  padding: 0 15px;
 }
-#header {grid-area: header}
+#header {
+  grid-area: header;
+  background-color: var(--highlight);
+  border: 2px solid var(--border);
+}
 #accounts {padding: 5pt 2pt}
 
+#accounts, #nav-options, #mailboxes {
+  margin: 10px 0;
+}
+
 #mailboxes {
+  border: 0;
   display: block;
   flex: 1;
-  margin-top: 5px;
   font-size: var(--font-big);
   height: 80%;
+  overflow-y: auto;
   width: 100%;
 }
 #mailboxes option {padding: 5px}
 
 #mailbox {
-  overflow-x: auto;
-  overflow-y: scroll;
+  overflow: auto scroll;
 }
 #mailbox table {
   border-collapse: collapse;
@@ -170,8 +178,7 @@ button, .btn {
 
 .header {
   background-color: var(--highlight);
-  border-bottom: 2px solid var(--border);
-  border-top: 2px solid var(--border);
+/*  border: 2px solid var(--border);*/
 }
 .header th {
   text-align: right;
@@ -231,9 +238,12 @@ button, .btn {
 #btn-dropdown a:hover {background: var(--highlight)}
 
 #editor {
+  background-color: var(--highlight);
   display: grid;
   z-index: 1000;
   position: fixed;
+  border-radius: 10px;
+  padding: 10px;
   border: 2px solid var(--border);
   top: 150px;
   left: 150px;
@@ -246,21 +256,29 @@ button, .btn {
   display: block;
   height: 100%;
 }
+#editor-attachments {
+  border-top: 0;
+  border-bottom: 2px solid var(--border);
+}
 #editor-header {
   display: block;
   max-height: 200px;
   overflow-y: scroll;
   padding: 3px;
+  border-bottom: 0;
 }
 #editor-header th, #editor-attachments th {
   position: relative;
   min-width: 150px;
 }
+#editor-buttons button {
+  padding: 5pt 2pt;
+  width: 125px;
+}
 #editor-header .delete {
   content: "&#128465;";
 }
 #editor-buttons {
-  background-color: var(--highlight);
   text-align: right;
   padding: 3px;
 }
@@ -270,12 +288,10 @@ button, .btn {
 }
 
 .switch {
-  background-color: var(--highlight);
-  border-bottom: 2px solid var(--border);
   font-size: var(--font-big);
   height: 20px;
-  border-top: 2px solid var(--border);
   padding: 2px;
+  margin: 2px;
   position: relative;
 }
 
