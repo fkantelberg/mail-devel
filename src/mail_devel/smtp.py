@@ -1,4 +1,5 @@
 import logging
+import uuid
 from email.message import Message
 from typing import Type
 
@@ -15,12 +16,14 @@ class MemoryHandler(AsyncMessage):
         self,
         mailboxes: TestMailboxDict,
         flagged_seen: bool = False,
+        ensure_message_id: bool = True,
         message_class: Type[Message] | None = None,
         multi_user: bool = False,
     ):
         super().__init__(message_class)
         self.mailboxes: TestMailboxDict = mailboxes
         self.flagged_seen: bool = flagged_seen
+        self.ensure_message_id = ensure_message_id
         self.multi_user: bool = multi_user
 
     def prepare_message(self, session, envelope):
@@ -34,6 +37,9 @@ class MemoryHandler(AsyncMessage):
 
     async def handle_message(self, message: Message) -> None:  # type: ignore
         _logger.info(f"Got message {message['From']} -> {message['To']}")
+        if not message["Message-Id"] and self.ensure_message_id:
+            message.add_header("Message-Id", f"{uuid.uuid4()}@mail-devel")
+
         await self.mailboxes.append(
             message,
             flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),

@@ -80,9 +80,13 @@ button, .btn {
 #wrapper {
   display: grid;
   height: 100%;
-  grid-template-areas: "nav mailbox" "nav header" "nav content";
-  grid-template-columns: 250px auto;
-  grid-template-rows: 30% max-content auto;
+  grid-template-areas:
+    "nav nav-drag mailbox"
+    "nav nav-drag mailbox-drag"
+    "nav nav-drag header"
+    "nav nav-drag content";
+  grid-template-columns: 250px 3px auto;
+  grid-template-rows: 30% 3px max-content auto;
 }
 
 *:focus-visible {outline: none}
@@ -104,6 +108,8 @@ button, .btn {
   display: flex;
   flex-direction: column;
   grid-area: nav;
+  overflow: auto;
+  resize: horizontal;
   padding: 0 15px;
 }
 #header {
@@ -112,6 +118,16 @@ button, .btn {
   border: 2px solid var(--border);
 }
 #accounts {padding: 5pt 2pt}
+#nav-dragbar {
+  background-color: var(--primary);
+  grid-area: nav-drag;
+  cursor: ew-resize;
+}
+#mailbox-dragbar {
+  background-color: var(--primary);
+  grid-area: mailbox-drag;
+  cursor: ns-resize;
+}
 
 #accounts, #nav-options, #mailboxes {
   margin: 10px 0;
@@ -178,7 +194,6 @@ button, .btn {
 
 .header {
   background-color: var(--highlight);
-/*  border: 2px solid var(--border);*/
 }
 .header th {
   text-align: right;
@@ -210,7 +225,7 @@ button, .btn {
   display: none;
 }
 
-#btn-new, #uploader {
+#btn-new, #uploader, #btn-random {
   font-size: var(--font-big);
   padding: 5pt 2pt;
   margin: 2px 0;

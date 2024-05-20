@@ -39,10 +39,13 @@
         <div>Upload Mail</div>
         <input type="file" multiple="multiple"/>
       </label>
+      <button id="btn-random" type="button">Randomize Mail</button>
 
       <select id="mailboxes" name="mailboxes" multiple="multiple">
       </select>
     </div>
+
+    <div id="nav-dragbar"></div>
 
     <div id="mailbox" class="container">
       <table>
@@ -51,7 +54,7 @@
             <th class="summary">Summary</th>
             <th class="date"><span class="ordering"></span> Date</th>
             <th class="read">Read</th>
-            <th class="read">Deleted</th>
+            <th class="deleted">Deleted</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -81,6 +84,8 @@
         </tfoot>
       </table>
     </div>
+
+    <div id="mailbox-dragbar"></div>
 
     <table id="header" class="header">
       <tr id="header-from">

@@ -1,5 +1,8 @@
+import hashlib
+import json
 import logging
 import os
+import secrets
 import ssl
 import uuid
 from email import header, message_from_bytes, message_from_string, policy
@@ -8,9 +11,11 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from importlib import resources
+from typing import Tuple
 
+import aiohttp
 from aiohttp import web
-from aiohttp.web import Request, Response
+from aiohttp.web import Request, Response, WebSocketResponse
 from pymap.backend.dict.mailbox import Message
 from pymap.parsing.specials import FetchRequirement
 from pymap.parsing.specials.flag import Flag
@@ -60,6 +65,7 @@ class Frontend:
         port: int = 8080,
         devel: str = "",
         flagged_seen: bool = False,
+        ensure_message_id: bool = True,
         client_max_size: int = 1 << 20,
         multi_user: bool = False,
     ):
@@ -70,8 +76,11 @@ class Frontend:
         self.user: str = user
         self.devel: str = devel
         self.flagged_seen: bool = flagged_seen
+        self.ensure_message_id = ensure_message_id
         self.client_max_size: int = client_max_size
         self.multi_user: bool = multi_user
+
+        self.mail_cache: dict[str, Tuple[str, str, int]] = {}
 
     def load_resource(self, resource: str) -> str:
         if self.devel:  # pragma: no cover
@@ -91,35 +100,10 @@ class Frontend:
         self.api.add_routes(
             [
                 web.get("/", self._page_index),
-                web.get("/config", self._api_config),
                 web.get(r"/{static:.*\.(css|js)}", self._page_static),
-                web.post(r"/api/{account:\d+}/{mailbox:\d+}", self._api_post),
-                web.post(r"/api/upload/{account:\d+}/{mailbox:\d+}", self._api_upload),
-                web.get(r"/api", self._api_index),
-                web.get(r"/api/{account:\d+}", self._api_account),
-                web.get(r"/api/{account:\d+}/{mailbox:\d+}", self._api_mailbox),
+                web.get("/websocket", self._websocket),
                 web.get(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}",
-                    self._api_message,
-                ),
-                web.get(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/reply",
-                    self._api_reply,
-                ),
-                web.get(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/attachment/{attachment}",
-                    self._api_attachment,
-                ),
-                web.get(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags", self._api_flag
-                ),
-                web.put(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag:[a-z]+}",
-                    self._api_flag,
-                ),
-                web.delete(
-                    r"/api/{account:\d+}/{mailbox:\d+}/{uid:\d+}/flags/{flag:[a-z]+}",
-                    self._api_flag,
+                    r"/attachment/{mail:.*}/{attachment:.*}", self._download_attachment
                 ),
             ]
         )
@@ -129,6 +113,35 @@ class Frontend:
             host=self.host or None,
             port=self.port,
         )
+
+    async def _websocket(self, request: Request) -> WebSocketResponse:
+        ws = WebSocketResponse()
+        await ws.prepare(request)
+
+        _logger.info(f"Connected websocket: {request.remote}")
+        async for msg in ws:
+            if msg.type != aiohttp.WSMsgType.TEXT:
+                continue
+
+            try:
+                data = json.loads(msg.data)
+            except json.JSONDecodeError:
+                continue
+
+            if not isinstance(data, dict) or not data.get("command"):
+                continue
+
+            command = data.pop("command")
+            if command == "close":
+                await ws.close()
+                continue
+
+            func = getattr(self, f"on_{command}", None)
+            if callable(func):
+                await func(ws, **data)
+
+        _logger.info(f"Disconnected websocket: {request.remote}")
+        return ws
 
     async def _page_index(self, request: Request) -> Response:  # pylint: disable=W0613
         try:
@@ -158,7 +171,15 @@ class Frontend:
     async def _message_content(self, msg: Message) -> bytes:
         return bytes((await msg.load_content(FetchRequirement.CONTENT)).content)
 
-    async def _convert_message(self, msg: Message, full: bool = False) -> dict:
+    def message_hash(self, content: bytes | str) -> str:
+        if isinstance(content, str):
+            content = content.encode()
+
+        return hashlib.sha512(content).hexdigest()
+
+    async def _convert_message(
+        self, msg: Message, *, account: str, mailbox: str, full: bool = False
+    ) -> dict:
         content = await self._message_content(msg)
 
         message = message_from_bytes(content)
@@ -172,6 +193,9 @@ class Frontend:
         if not full:
             return result
 
+        msg_hash = self.message_hash(content)
+        self.mail_cache[msg_hash] = (account, mailbox, msg.uid)
+
         result["attachments"] = []
         if message.is_multipart():
             for part in message.walk():
@@ -179,7 +203,10 @@ class Frontend:
                 cdispo = part.get_content_disposition()
 
                 if cdispo == "attachment":
-                    result["attachments"].append(part.get_filename())
+                    name = part.get_filename()
+                    result["attachments"].append(
+                        {"name": name, "url": f"/attachment/{msg_hash}/{name}"}
+                    )
                 elif ctype == "text/plain":
                     result["body_plain"] = part.get_payload(decode=True).decode()
                 elif ctype == "text/html":
@@ -192,144 +219,138 @@ class Frontend:
         result["content"] = bytes(content).decode()
         return result
 
-    async def _api_config(self, request: Request) -> Response:  # pylint: disable=W0613
-        return web.json_response(
+    async def on_config(self, ws: WebSocketResponse) -> None:
+        await ws.send_json(
             {
-                "multi_user": self.multi_user,
-                "flagged_seen": self.flagged_seen,
+                "command": "config",
+                "data": {
+                    "multi_user": self.multi_user,
+                    "flagged_seen": self.flagged_seen,
+                },
             }
         )
 
-    async def _api_index(self, request: Request) -> Response:  # pylint: disable=W0613
-        accounts = await self.mailboxes.list()
-        return web.json_response(
-            {self.mailboxes.id_of_user(user): user for user in accounts}
+    async def on_list_accounts(self, ws: WebSocketResponse) -> None:
+        await ws.send_json(
+            {
+                "command": "list_accounts",
+                "data": {
+                    "accounts": await self.mailboxes.list(),
+                },
+            }
         )
 
-    async def _api_account(self, request: Request) -> Response:  # pylint: disable=W0613
-        try:
-            account_id = int(request.match_info["account"])
-            account = await self.mailboxes.get_by_id(account_id)
-        except KeyError as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
-
-        mailboxes = await account.list_mailboxes()
-        return web.json_response(
-            {account.id_of_mailbox(e.name): e.name for e in mailboxes.list()}
+    async def on_list_mailboxes(self, ws: WebSocketResponse, account: str) -> None:
+        acc = await self.mailboxes.get(account)
+        mailboxes = await acc.list_mailboxes()
+        await ws.send_json(
+            {
+                "command": "list_mailboxes",
+                "data": {
+                    "account": account,
+                    "mailboxes": [m.name for m in mailboxes.list()],
+                },
+            }
         )
 
-    async def _api_upload(self, request: Request) -> Response:  # pylint: disable=W0613
+    async def on_list_mails(
+        self, ws: WebSocketResponse, account: str | None, mailbox: str | None
+    ) -> None:
+        if not account:
+            return
+
+        if not mailbox:
+            mailbox = "INBOX"
+
         try:
-            account_id = int(request.match_info["account"])
-            account = self.mailboxes.user_mapping[account_id]
-            mailbox_id = int(request.match_info["mailbox"])
-            mailbox = self.mailboxes[account].get_mailbox_name(mailbox_id)
-        except KeyError as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
-
-        data = await request.json()
-        if not isinstance(data, list):
-            raise web.HTTPBadRequest()
-
-        compat_strict = policy.compat32.clone(raise_on_defect=True)
-        for mail in data:
-            try:
-                msg = message_from_string(mail["data"], policy=compat_strict)
-                await self.mailboxes.append(
-                    msg,
-                    flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
-                    mailbox=mailbox,
-                )
-            except MessageDefect:
-                continue
-
-        return web.json_response({})
-
-    async def _api_post(self, request: Request) -> Response:
-        try:
-            account_id = int(request.match_info["account"])
-            account = self.mailboxes.user_mapping[account_id]
-            mailbox_id = int(request.match_info["mailbox"])
-            mailbox = self.mailboxes[account].get_mailbox_name(mailbox_id)
-        except KeyError as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
-
-        data = await request.json()
-        if not isinstance(data, dict):
-            raise web.HTTPBadRequest()
-
-        header, body = map(data.get, ("header", "body"))
-        if not isinstance(header, dict) or not isinstance(body, str):
-            raise web.HTTPBadRequest()
-
-        message = MIMEMultipart()
-        message.attach(MIMEText(body))
-
-        for key, value in header.items():
-            if key.strip() and value.strip():
-                message.add_header(key.title(), value)
-
-        for att in data.get("attachments", []):
-            part = MIMEBase(*(att["mimetype"] or "text/plain").split("/"))
-            part.set_payload(att["content"])
-            part.add_header("Content-Transfer-Encoding", "base64")
-            part.add_header(
-                "Content-Disposition",
-                f'attachment; filename="{att["name"]}"',  # noqa: B907
-            )
-            message.attach(part)
-
-        await self.mailboxes.append(
-            message,
-            flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
-            mailbox=mailbox,
-        )
-        return web.json_response({"status": "ok"})
-
-    async def _api_mailbox(self, request: Request) -> Response:
-        try:
-            account_id = int(request.match_info["account"])
-            account = self.mailboxes.user_mapping[account_id]
-            mailbox_id = int(request.match_info["mailbox"])
-            mailbox = await self.mailboxes[account].get_mailbox_by_id(mailbox_id)
-        except KeyError as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
+            mbox = await self.mailboxes[account].get_mailbox(mailbox)
+        except (IndexError, KeyError):  # pragma: no cover
+            return
 
         result = []
-        async for msg in mailbox.messages():
-            result.append(await self._convert_message(msg))
+        async for msg in mbox.messages():
+            result.append(
+                await self._convert_message(msg, account=account, mailbox=mailbox)
+            )
+
         result.sort(key=lambda x: x["date"], reverse=True)
-        return web.json_response(result)
 
-    async def _api_message(self, request: Request) -> Response:
+        await ws.send_json(
+            {
+                "command": "list_mails",
+                "data": {"account": account, "mailbox": mailbox, "mails": result},
+            }
+        )
+
+    async def on_get_mail(
+        self, ws: WebSocketResponse, account: str, mailbox: str, uid: int
+    ) -> None:
         try:
-            account_id = int(request.match_info["account"])
-            account = self.mailboxes.user_mapping[account_id]
-            mailbox_id = int(request.match_info["mailbox"])
-            uid = int(request.match_info["uid"])
-            mailbox = await self.mailboxes[account].get_mailbox_by_id(mailbox_id)
-        except (IndexError, KeyError) as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
+            mbox = await self.mailboxes[account].get_mailbox(mailbox)
+        except (IndexError, KeyError):  # pragma: no cover
+            return
 
-        async for msg in mailbox.messages():
+        async for msg in mbox.messages():
             if msg.uid == uid:
-                return web.json_response(await self._convert_message(msg, True))
+                await ws.send_json(
+                    {
+                        "command": "get_mail",
+                        "data": {
+                            "account": account,
+                            "mailbox": mailbox,
+                            "uid": uid,
+                            "mail": await self._convert_message(
+                                msg,
+                                account=account,
+                                mailbox=mailbox,
+                                full=True,
+                            ),
+                        },
+                    }
+                )
+                break
 
-        raise web.HTTPNotFound()
+    async def on_random_mail(
+        self, ws: WebSocketResponse, account: str, mailbox: str
+    ) -> None:
+        headers = {
+            "subject": f"Random Subject [{secrets.token_hex(8)}]",
+            "message-id": f"{uuid.uuid4()}@mail-devel",
+            "to": account,
+            "from": f"{secrets.token_hex(8)}@mail-devel",
+        }
+        _logger.info("Randomized mail")
+        await ws.send_json(
+            {
+                "command": "random_mail",
+                "data": {
+                    "account": account,
+                    "mailbox": mailbox,
+                    "mail": {
+                        "header": headers,
+                        "body_plain": f"Body {uuid.uuid4()}",
+                    },
+                },
+            }
+        )
 
-    async def _api_reply(self, request: Request) -> Response:
+    async def on_reply_mail(
+        self, ws: WebSocketResponse, account: str, mailbox: str, uid: int
+    ) -> None:
         try:
-            account_id = int(request.match_info["account"])
-            mailbox_id = int(request.match_info["mailbox"])
-            uid = int(request.match_info["uid"])
-            account = await self.mailboxes.get_by_id(account_id)
-            mailbox = await account.get_mailbox_by_id(mailbox_id)
-        except (IndexError, KeyError) as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
+            mbox = await self.mailboxes[account].get_mailbox(mailbox)
+        except (IndexError, KeyError):  # pragma: no cover
+            return
 
-        async for msg in mailbox.messages():
+        async for msg in mbox.messages():
             if msg.uid == uid:
-                message = await self._convert_message(msg, True)
+                message = await self._convert_message(
+                    msg,
+                    account=account,
+                    mailbox=mailbox,
+                    full=True,
+                )
+
                 headers = message["header"]
                 headers["subject"] = f"RE: {headers['subject']}"
                 msg_id = headers.get("message-id", None)
@@ -343,23 +364,139 @@ class Frontend:
                 for key in list(headers):
                     if key.startswith("x-"):
                         headers.pop(key, None)
-                return web.json_response(message)
 
-        raise web.HTTPNotFound()
+                await ws.send_json(
+                    {
+                        "command": "reply_mail",
+                        "data": {
+                            "account": account,
+                            "mailbox": mailbox,
+                            "uid": uid,
+                            "mail": message,
+                        },
+                    }
+                )
+                break
 
-    async def _api_attachment(self, request: Request) -> Response:
+    async def on_flag_mail(
+        self,
+        ws: WebSocketResponse,
+        account: str,
+        mailbox: str,
+        uid: int,
+        method: str,
+        flag: str,
+    ) -> None:
         try:
-            account_id = int(request.match_info["account"])
-            mailbox_id = int(request.match_info["mailbox"])
-            uid = int(request.match_info["uid"])
+            mbox = await self.mailboxes[account].get_mailbox(mailbox)
+            method = method.lower()
+
+            if method in ("unset", "set"):
+                flags = [Flag(b"\\" + flag.title().encode())]
+            else:
+                flags = []
+        except (IndexError, KeyError):  # pragma: no cover
+            return
+
+        async for msg in mbox.messages():
+            if msg.uid != uid:
+                continue
+
+            if method == "unset":
+                msg.permanent_flags = msg.permanent_flags.difference(flags)
+            elif method == "set":
+                msg.permanent_flags = msg.permanent_flags.union(flags)
+
+            _logger.info(
+                f"{method.title()} flag {flag} of mail {uid}: {flags}: {msg.permanent_flags}"
+            )
+
+            await self.on_list_mails(ws, account, mailbox)
+            break
+
+    async def on_upload_mails(
+        self,
+        ws: WebSocketResponse,
+        account: str | None,
+        mailbox: str | None,
+        mails: list[dict],
+    ) -> None:
+        compat_strict = policy.compat32.clone(raise_on_defect=True)
+        counter = 0
+        for mail in mails:
+            try:
+                msg = message_from_string(mail["data"], policy=compat_strict)
+
+                if not msg["Message-Id"] and self.ensure_message_id:
+                    msg.add_header("Message-Id", f"{uuid.uuid4()}@mail-devel")
+
+                await self.mailboxes.append(
+                    msg,
+                    flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+                    mailbox=mailbox or "INBOX",
+                )
+                counter += 1
+            except MessageDefect:
+                continue
+
+        if counter:
+            _logger.info(f"Uploaded {counter} mails")
+            await self.on_list_mails(ws, account, mailbox)
+
+    async def on_send_mail(
+        self,
+        ws: WebSocketResponse,
+        account: str | None,
+        mailbox: str | None,
+        mail: dict,
+    ) -> None:
+        header, body = map(mail.get, ("header", "body"))
+        if not isinstance(header, dict) or not isinstance(body, str):
+            return
+
+        message = MIMEMultipart()
+        message.attach(MIMEText(body))
+
+        for key, value in header.items():
+            if key.strip() and value.strip():
+                message.add_header(key.title(), value)
+
+        if not message["Message-Id"] and self.ensure_message_id:
+            message.add_header("Message-Id", f"{uuid.uuid4()}@mail-devel")
+
+        for att in mail.get("attachments", []):
+            part = MIMEBase(*(att["mimetype"] or "text/plain").split("/"))
+            part.set_payload(att["content"])
+            part.add_header("Content-Transfer-Encoding", "base64")
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{att["name"]}"',  # noqa: B907
+            )
+            message.attach(part)
+
+        await self.mailboxes.append(
+            message,
+            flags=frozenset({Flag(b"\\Seen")} if self.flagged_seen else []),
+            mailbox=mailbox or "INBOX",
+        )
+        _logger.info("New mail sent")
+        await self.on_list_mails(ws, account, mailbox)
+
+    async def _download_attachment(self, request: Request) -> Response:
+        try:
+            mail_hash = request.match_info["mail"]
+            if mail_hash not in self.mail_cache:
+                raise web.HTTPNotFound()
+
+            account, mailbox, uid = self.mail_cache[mail_hash]
             attachment = request.match_info["attachment"]
-            account = await self.mailboxes.get_by_id(account_id)
-            mailbox = await account.get_mailbox_by_id(mailbox_id)
+            mbox = await self.mailboxes[account].get_mailbox(mailbox)
         except (IndexError, KeyError) as e:  # pragma: no cover
+            self.mail_cache.pop(mail_hash, None)
             raise web.HTTPNotFound() from e
 
         message = None
-        async for msg in mailbox.messages():
+        async for msg in mbox.messages():
             if msg.uid == uid:
                 content = await self._message_content(msg)
                 message = message_from_bytes(content)
@@ -381,33 +518,5 @@ class Frontend:
                         "Content-Disposition": part.get("Content-Disposition"),
                     },
                 )
-
-        raise web.HTTPNotFound()
-
-    async def _api_flag(self, request: Request) -> Response:
-        try:
-            account_id = int(request.match_info["account"])
-            mailbox_id = int(request.match_info["mailbox"])
-            account = await self.mailboxes.get_by_id(account_id)
-            mailbox = await account.get_mailbox_by_id(mailbox_id)
-            uid = int(request.match_info["uid"])
-
-            if request.method in ("DELETE", "PUT"):
-                flags = [Flag(b"\\" + request.match_info["flag"].title().encode())]
-            else:
-                flags = []
-        except (IndexError, KeyError) as e:  # pragma: no cover
-            raise web.HTTPNotFound() from e
-
-        async for msg in mailbox.messages():
-            if msg.uid != uid:
-                continue
-
-            if request.method == "DELETE":
-                msg.permanent_flags = msg.permanent_flags.difference(flags)
-            elif request.method == "PUT":
-                msg.permanent_flags = msg.permanent_flags.union(flags)
-
-            return web.json_response(flags_to_api(msg.permanent_flags))
 
         raise web.HTTPNotFound()

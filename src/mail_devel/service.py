@@ -102,7 +102,8 @@ class Service:
         # Create the SMTP and optionally SMTPS service
         service.handler = MemoryHandler(
             service.mailboxes,
-            args.flagged_seen,
+            flagged_seen=args.flagged_seen or args.smtp_flagged_seen,
+            ensure_message_id=not args.no_message_id or not args.smtp_no_message_id,
             multi_user=args.multi_user,
         )
         service.smtp = Controller(
@@ -145,7 +146,8 @@ class Service:
                 host=args.http_host or args.host,
                 port=args.http_port,
                 devel=args.devel,
-                flagged_seen=args.flagged_seen,
+                flagged_seen=args.flagged_seen or args.http_flagged_seen,
+                ensure_message_id=not args.no_message_id or not args.http_no_message_id,
                 client_max_size=args.client_max_size,
                 multi_user=args.multi_user,
             )
@@ -242,6 +244,16 @@ class Service:
             type=utils.convert_size,
             help="Max body size for POST requests",
         )
+        group.add_argument(
+            "--http-flagged-seen",
+            action="store_true",
+            help="Flag messages in the INBOX as seen if they arrive via HTTP",
+        )
+        group.add_argument(
+            "--http-no-message-id",
+            action="store_true",
+            help="Ensure that a Message-ID exists via HTTP",
+        )
 
         group = parser.add_argument_group("SMTP")
         parser.add_argument(
@@ -280,9 +292,14 @@ class Service:
             help="Require STARTTLS",
         )
         group.add_argument(
-            "--flagged-seen",
+            "--smtp-flagged-seen",
             action="store_true",
             help="Flag messages in the INBOX as seen if they arrive via SMTP",
+        )
+        group.add_argument(
+            "--smtp-no-message-id",
+            action="store_true",
+            help="Ensure that a Message-ID exists via SMTP",
         )
 
         group = parser.add_argument_group("Options")
@@ -292,6 +309,16 @@ class Service:
             type=lambda x: utils.valid_file(x, True),
             help="Use files from the working directory instead of the resources for "
             "the HTTP frontend. Useful for own frontends or development",
+        )
+        group.add_argument(
+            "--flagged-seen",
+            action="store_true",
+            help="Flag messages in the INBOX as seen if they arrive via SMTP and HTTP",
+        )
+        group.add_argument(
+            "--no-message-id",
+            action="store_true",
+            help="Ensure that a Message-ID exists via SMTP and HTTP",
         )
 
         group = parser.add_argument_group("Security")

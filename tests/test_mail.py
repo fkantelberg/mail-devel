@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
-
 from mail_devel import Service
 from mail_devel import __main__ as main
 
@@ -103,11 +102,8 @@ async def prepare_http_test():
         pw, imap_port=imap_port, smtp_port=smtp_port, http_port=http_port
     )
     account = await service.mailboxes.get(service.demo_user)
-    service.mailboxes.id_of_user(service.demo_user)
     mailbox = await account.get_mailbox("INBOX")
-    account.id_of_mailbox("INBOX")
     await account.get_mailbox("SENT")
-    account.id_of_mailbox("INBOX")
 
     assert service.frontend.load_resource("index.html")
     assert service.frontend.load_resource("main.css")
@@ -126,13 +122,13 @@ async def prepare_http_test():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_no_password():
+async def test_no_password():
     with pytest.raises(argparse.ArgumentError):
         Service.parse([])
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_service():
+async def test_service():
     smtp_port = unused_ports()
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=smtp_port, no_http=None)
@@ -153,7 +149,7 @@ async def test_mail_devel_service():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_http_static():
+async def test_http_static():
     async with prepare_http_test() as (session, _service):
         for route in ["/", "/main.css", "/main.js"]:
             async with session.get(route) as response:
@@ -164,115 +160,287 @@ async def test_mail_devel_http_static():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_http():
-    async with prepare_http_test() as (session, service):
-        async with session.get("/api") as response:
-            assert response.status == 200
-            users = await response.json()
-            assert len(users) == 1
-            assert service.demo_user in users.values()
+async def test_websocket():
+    async with prepare_http_test() as (session, _service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_str("invalid json")
+            await ws.send_json([])
 
-        async with session.get("/api/1") as response:
-            assert response.status == 200
-            users = await response.json()
-            assert len(users) == 2
-            assert "INBOX" in users.values()
+            await ws.send_json({"command": "config"})
+            data = await ws.receive_json()
+            assert data["command"] == "config"
+            assert data["data"]
 
-        async with session.get("/api/1/1") as response:
-            assert response.status == 200
-            mbox = await response.json()
-            assert len(mbox) == 1
-            assert mbox[0]["uid"] == 101
-
-        async with session.get("/api/1/1/101") as response:
-            assert response.status == 200
-            msg = await response.json()
-            assert msg
-            assert msg["attachments"]
-
-        async with session.get("/api/1/1/999") as response:
-            assert response.status == 404
+            await ws.send_json({"command": "close"})
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_http_reply():
-    async with prepare_http_test() as (session, _service):
-        async with session.get("/api/1/1/101/reply") as response:
-            assert response.status == 200
-            msg = await response.json()
+async def test_http_upload():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            mail_no_id = "\n".join(
+                x for x in MAIL.splitlines() if "Message-ID" not in x
+            )
+
+            await ws.send_json(
+                {
+                    "command": "upload_mails",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "mails": [{"data": MAIL}, {"data": mail_no_id}],
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert len(data["data"]["mails"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_http():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_json({"command": "list_accounts"})
+            data = await ws.receive_json()
+            assert data["command"] == "list_accounts"
+            assert data["data"]["accounts"] == [service.demo_user]
+
+            await ws.send_json(
+                {"command": "list_mailboxes", "account": service.demo_user}
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mailboxes"
+            assert data["data"]["mailboxes"] == ["INBOX", "SENT"]
+
+            await ws.send_json(
+                {"command": "list_mails", "account": service.demo_user, "mailbox": None}
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert len(data["data"]["mails"]) == 1
+            assert data["data"]["mails"][0]["uid"] == 101
+
+            await ws.send_json(
+                {"command": "list_mails", "account": None, "mailbox": None}
+            )
+            with pytest.raises(TimeoutError):
+                await ws.receive_json(timeout=0.25)
+
+            await ws.send_json(
+                {
+                    "command": "get_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "get_mail"
+            assert data["data"]["uid"] == 101
+            assert data["data"]["mail"]
+            assert data["data"]["mail"]["attachments"]
+
+            await ws.send_json(
+                {
+                    "command": "get_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 999,
+                }
+            )
+            with pytest.raises(TimeoutError):
+                await ws.receive_json(timeout=0.25)
+
+
+@pytest.mark.asyncio
+async def test_http_random():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_json(
+                {
+                    "command": "random_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "random_mail"
+            assert data["data"]["mail"]["header"]
+            assert data["data"]["mail"]["body_plain"]
+
+
+@pytest.mark.asyncio
+async def test_http_reply():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_json(
+                {
+                    "command": "reply_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "reply_mail"
+            msg = data["data"]["mail"]
             assert msg["header"]["to"] == "test <test@example.org>"
             assert msg["header"]["message-id"].endswith("@mail-devel")
 
-        async with session.get("/api/1/1/999/reply") as response:
-            assert response.status == 404
+            await ws.send_json(
+                {
+                    "command": "reply_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 999,
+                }
+            )
+            with pytest.raises(TimeoutError):
+                await ws.receive_json(timeout=0.25)
 
-        msg.update(
-            {
-                "body": "hello",
-                "attachments": [
-                    {
-                        "mimetype": "text/plain",
-                        "name": "file.txt",
-                        "content": "aGVsbG8gd29ybGQ=",
-                    }
-                ],
-            }
-        )
-        async with session.post("/api/1/1", json=msg) as response:
-            assert response.status == 200
+            msg.update(
+                {
+                    "body": "hello",
+                    "attachments": [
+                        {
+                            "mimetype": "text/plain",
+                            "name": "file.txt",
+                            "content": "aGVsbG8gd29ybGQ=",
+                        }
+                    ],
+                }
+            )
+            await ws.send_json(
+                {
+                    "command": "list_mails",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
 
-        async with session.post("/api/1/1", json={}) as response:
-            assert response.status == 400
-
-        async with session.post("/api/1/1", json=[]) as response:
-            assert response.status == 400
-
-        async with session.get("/api/1/1") as response:
-            assert response.status == 200
-            mbox = await response.json()
-            assert len(mbox) == 2
-
-
-@pytest.mark.asyncio
-async def test_mail_devel_http_flagging():
-    async with prepare_http_test() as (session, _service):
-        async with session.get("/api/1/1/101/flags") as response:
-            assert response.status == 200
-            assert await response.json() == []
-
-        async with session.put("/api/1/1/101/flags/unseen") as response:
-            assert response.status == 200
-            assert await response.json() == ["unseen"]
-
-        async with session.get("/api/1/1/101/flags") as response:
-            assert response.status == 200
-            assert await response.json() == ["unseen"]
-
-        async with session.delete("/api/1/1/101/flags/unseen") as response:
-            assert response.status == 200
-            assert await response.json() == []
-
-        async with session.put("/api/1/1/999/flags/unseen") as response:
-            assert response.status == 404
+            await ws.send_json(
+                {
+                    "command": "send_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "mail": msg,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert len(data["data"]["mails"]) == 2
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_http_attachment():
-    async with prepare_http_test() as (session, _service):
-        print(_service.mailboxes.user_mapping)
-        async with session.get("/api/1/1/101/attachment/att abc.txt") as response:
-            assert response.status == 200
-            assert await response.text() == "hello world"
+async def test_http_flagging():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_json(
+                {
+                    "command": "get_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "get_mail"
+            assert data["data"]["mail"]["uid"] == 101
+            assert data["data"]["mail"]["flags"] == []
 
-        async with session.get("/api/1/1/101/attachment/unknown.txt") as response:
-            assert response.status == 404
+            await ws.send_json(
+                {
+                    "command": "flag_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                    "method": "set",
+                    "flag": "seen",
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert data["data"]["mails"][0]["uid"] == 101
+            assert data["data"]["mails"][0]["flags"] == ["seen"]
 
-        async with session.get("/api/1/1/999/attachment/att abc.txt") as response:
-            assert response.status == 404
+            await ws.send_json(
+                {
+                    "command": "flag_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                    "method": "invalid",
+                    "flag": "seen",
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert data["data"]["mails"][0]["uid"] == 101
+            assert data["data"]["mails"][0]["flags"] == ["seen"]
+
+            await ws.send_json(
+                {
+                    "command": "flag_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                    "method": "unset",
+                    "flag": "seen",
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mails"
+            assert data["data"]["mails"][0]["uid"] == 101
+            assert data["data"]["mails"][0]["flags"] == []
+
+            await ws.send_json(
+                {
+                    "command": "flag_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 999,
+                    "method": "unset",
+                    "flag": "seen",
+                }
+            )
+            with pytest.raises(TimeoutError):
+                await ws.receive_json(timeout=0.25)
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_smtp_auth():
+async def test_http_attachment():
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            await ws.send_json(
+                {
+                    "command": "get_mail",
+                    "account": service.demo_user,
+                    "mailbox": "INBOX",
+                    "uid": 101,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "get_mail"
+            assert data["data"]["uid"] == 101
+            assert data["data"]["mail"]
+            assert data["data"]["mail"]["attachments"]
+
+            att = data["data"]["mail"]["attachments"][0]
+            async with session.get(att["url"]) as response:
+                assert response.status == 200
+                assert await response.text() == "hello world"
+
+            url = att["url"].rsplit("/", 1)[0]
+            async with session.get(f"{url}/unknown.txt") as response:
+                assert response.status == 404
+
+            async with session.get("/attachment/invalid/att abc.txt") as response:
+                assert response.status == 404
+
+
+@pytest.mark.asyncio
+async def test_smtp_auth():
     port = unused_ports()
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=port, no_http=None)
@@ -292,6 +460,8 @@ async def test_mail_devel_smtp_auth():
             smtp.login("test", pw)
             smtp.sendmail("test@example.org", "test@example.org", MAIL)
 
+        await asyncio.sleep(0.1)
+
         assert len([msg async for msg in mailbox.messages()]) == 2
 
         with pytest.raises(SMTPAuthenticationError), SMTP(
@@ -301,7 +471,7 @@ async def test_mail_devel_smtp_auth():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_smtp_auth_multi_user():
+async def test_smtp_auth_multi_user():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -322,7 +492,7 @@ async def test_mail_devel_smtp_auth_multi_user():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_imap_auth():
+async def test_imap_auth():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -343,7 +513,7 @@ async def test_mail_devel_imap_auth():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_imap_auth_multi_user():
+async def test_imap_auth_multi_user():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -367,7 +537,7 @@ async def test_mail_devel_imap_auth_multi_user():
 
 
 @pytest.mark.asyncio
-async def test_mail_devel_imap_auth_multi_user_mails():
+async def test_imap_auth_multi_user_mails():
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(

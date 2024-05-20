@@ -1,3 +1,7 @@
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function element(tag, attrs) {
   const ele = document.createElement(tag);
   if (!attrs)
@@ -31,18 +35,23 @@ function vis(selector, visible) {
 
 class MailClient {
   constructor() {
-    this.users = document.getElementById("accounts");
+    this.accounts = document.getElementById("accounts");
     this.connection = document.querySelector("#connection input[type=checkbox]");
     this.mailboxes = document.getElementById("mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
+    this.wrapper = document.querySelector("#wrapper");
     this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
-    this.user_id = null;
-    this.mailbox_id = null;
+    this.account_name = null;
+    this.mailbox_name = null;
     this.mail_uid = null;
     this.mail_selected = null;
     this.content_mode = "html";
     this.editor_mode = "simple";
     this.config = {};
+
+    this.reset_drag();
+
+    this.connect_socket();
 
     const toggle = document.querySelector("#color-scheme input");
     if (document.documentElement.classList.contains("dark"))
@@ -53,19 +62,6 @@ class MailClient {
       toggle.checked = false
 
     this.reorder(false);
-  }
-
-  async swap_theme() {
-    const toggle = document.querySelector("#color-scheme input");
-    if (toggle.checked) {
-      document.documentElement.classList.add("light");
-      document.documentElement.classList.remove("dark");
-    } else {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-    }
-
-    toggle.checked = !toggle.checked;
   }
 
   async visibility() {
@@ -87,65 +83,372 @@ class MailClient {
   async idle() {
     const self = this;
 
-    if (this.connection.checked) {
-        await this.fetch_accounts();
+    await this.load_accounts();
 
-        if (this.user_name)
-          await this.fetch_mailboxes(this.user_name);
+    if (this.account_name)
+      await this.load_mailboxes();
 
-        if (this.mailbox_id)
-          await this.fetch_mailbox(this.mailbox_id);
-    }
+    if (this.mailbox_name)
+      await this.load_mailbox();
 
     setTimeout(() => {self.idle();}, 2000);
   }
 
-  async set_flag(flag, method, uid = null) {
+  async flag_mail(flag, method, uid = null) {
     const mail_uid = uid || this.mail_uid;
-    if (this.mailbox_id && mail_uid) {
-      await fetch(
-        `/api/${this.user_id}/${this.mailbox_id}/${mail_uid}/flags/${flag}`,
-        {method: method},
-      );
-    }
-  }
-
-  async fetch_json(path) {
-    try {
-      const response = await fetch(path);
-      if (response.status !== 200)
-        return null;
-
-      return await response.json();
-    } catch (TypeError) {
-      return null;
-    }
-  }
-
-  async fetch_data(...path) {
-    return await this.fetch_json(path.length ? `/api/${path.join('/')}` : "/api");
-  }
-
-  async post_data(data, ...path) {
-    try {
-      const response = await fetch(
-        path.length ? `/api/${path.join('/')}` : "/api",
+    if (this.mailbox_name && mail_uid) {
+      await this.socket_send(
         {
-          method: "POST",
-          headers: {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(data),
-        },
+          command: "flag_mail",
+          account: this.account_name,
+          mailbox: this.mailbox_name,
+          uid: uid,
+          method: method,
+          flag: flag
+        }
       );
-      if (response.status !== 200)
-        return null;
-
-      return await response.json();
-    } catch (TypeError) {
-      return null;
     }
+  }
+
+  connect_socket() {
+    if (this.socket)
+      return;
+
+    const proto = (window.location.protocol === "https:") ? "wss:" : "ws:";
+    const url = `${proto}//${window.location.host}/websocket`;
+    this.socket = new WebSocket(url);
+
+    const self = this;
+    this.socket.onmessage = this.on_socket_message.bind(this);
+    this.socket.onclose = this.on_socket_close.bind(this);
+    this.socket.onerror = this.on_socket_error.bind(this);
+    this.socket.onopen = this.on_socket_open.bind(this);
+  }
+
+  close_socket() {
+    if (this.socket)
+      this.socket.close();
+
+    this.socket = null;
+  }
+
+  async on_socket_message(event) {
+    /* Dispatch the data to the correct handler */
+    const data = JSON.parse(event.data);
+    if (data.command) {
+      const func = this[`on_${data.command}`];
+      if (typeof func === "function") {
+        func.call(this, data.data);
+      }
+    }
+  }
+
+  async on_socket_open(event) {
+    await this.load_config();
+  }
+
+  async on_socket_close(event) {
+    if (!event.wasClean)
+      console.log("Websocket connection died");
+
+    this.socket = null;
+    if (this.connection.checked)
+      setTimeout(1000, this.connect_socket.bind(this));
+  }
+
+  async on_socket_error(event) {
+    console.error("Websocket error", event);
+  }
+
+  async socket_send(data) {
+    if (this.socket && this.socket.readyState)
+      this.socket.send(JSON.stringify(data));
+  }
+
+  async load_config() {
+    await this.socket_send({command: "config"});
+  }
+
+  async on_config(data) {
+    this.config = data;
+  }
+
+  async upload_files(element) {
+    const files = [];
+    for (const file of element.files) {
+      files.push({name: file.name, data: await file.text()});
+    }
+
+    await this.socket_send(
+      {
+        command: "upload_mails",
+        account: this.account_name,
+        mailbox: this.mailbox_name,
+        mails: files,
+      },
+    );
+
+    // Clear the files
+    element.value = null;
+  }
+
+  async load_accounts() {
+    await this.socket_send({command: "list_accounts"});
+  }
+
+  async on_list_accounts(data) {
+    const self = this;
+    const accounts = data.accounts;
+    if (!accounts)
+      return;
+
+    for (const opt of this.accounts.options) {
+      if (accounts.indexOf(opt.value) < 0)
+        opt.remove();
+      else
+        delete accounts[opt.value];
+    }
+
+    for (const account of accounts)
+      this.accounts.add(new Option(account, account));
+
+    if (this.accounts.selectedIndex < 0) {
+      this.accounts.selectedIndex = 0;
+      if (this.accounts.options[0]) {
+        await self.load_mailboxes(this.accounts.options[0].value);
+      }
+    } else {
+      const selected = this.accounts.options[this.accounts.selectedIndex].value;
+      if (this.account_name !== selected) {
+        await self.load_mailboxes(selected);
+      }
+    }
+  }
+
+  async load_mailboxes(account_name) {
+    if (!account_name)
+      account_name = this.account_name;
+
+    if (account_name)
+      await this.socket_send({command: "list_mailboxes", account: account_name});
+  }
+
+  async on_list_mailboxes(data) {
+    const self = this;
+    const account_name = data.account;
+
+    if (this.account_name !== account_name) {
+      this.mailbox_name = null;
+      this.mail_uid = null;
+      this.mailbox.innerHTML = "";
+      this.mailboxes.selectedIndex = -1;
+    }
+
+    this.account_name = account_name;
+
+    for (const opt of this.mailboxes.options) {
+      if (data.mailboxes.indexOf(opt.uid) < 0)
+        opt.remove()
+      else
+        data.splice(idx, 1);
+    }
+
+    for (const mailbox of data.mailboxes) {
+      this.mailboxes.add(
+        new Option(mailbox, mailbox, true, this.mailbox_name === mailbox)
+      );
+    }
+
+    if (this.mailboxes.selectedIndex < 0) {
+      this.mailboxes.selectedIndex = 0;
+      if (this.mailboxes.options[0]) {
+        await self.load_mailbox(this.mailboxes.options[0].value);
+      }
+    }
+  }
+
+  async load_mailbox(mailbox_name) {
+    if (!mailbox_name)
+      mailbox_name = this.mailbox_name;
+
+    if (mailbox_name)
+      await this.socket_send(
+        {command: "list_mails", account: this.account_name, mailbox: mailbox_name}
+      );
+  }
+
+  async on_list_mails(data) {
+    const mailbox_name = data.mailbox;
+    const mails = data.mails;
+    if (!mailbox_name)
+      return;
+
+    if (this.mailbox_name !== mailbox_name) {
+      this.mail_uid = null;
+      this.mailbox.innerHTML = "";
+
+      // on change of mailbox, do clear mail display
+      this._display_mail(undefined);
+    }
+
+    this.mailbox_name = mailbox_name;
+    const missing_msg = [];
+    const uids = [];
+    const lines = [];
+    const self = this;
+    for (const msg of mails) {
+      uids.push(msg.uid);
+
+      let found = false;
+      for (const line of this.mailbox.children) {
+        if (line.uid === msg.uid) {
+          found = true;
+          await self._mail_row_fill(line, msg);
+          lines.push(line);
+          break;
+        }
+      }
+
+      if (!found)
+        missing_msg.push(msg);
+    }
+
+    const template = document.querySelector("#mail-row-template");
+    for (const msg of missing_msg) {
+      const row = await self._mail_row_init(template, msg);
+
+      row.uid = msg.uid;
+      await self._mail_row_fill(row, msg);
+      lines.push(row);
+    }
+
+    for (const line of lines) {
+      if (uids.indexOf(line.uid) < 0 && line !== template)
+        line.remove();
+    }
+
+    if (this.sort_asc) lines.reverse();
+    for (const line of lines)
+      this.mailbox.append(line);
+  }
+
+  async load_mail(uid) {
+    await this.socket_send(
+      {
+        "command": "get_mail",
+        "account": this.account_name,
+        "mailbox": this.mailbox_name,
+        "uid": uid,
+      }
+    );
+  }
+
+  async on_get_mail(data) {
+    const self = this;
+    const uid = data.uid;
+    const mail = data.mail;
+    if (!uid || !mail)
+      return;
+
+    self.mail_uid = uid;
+    self._display_mail(mail);
+
+    const dropdown = document.querySelector("#btn-dropdown div");
+    dropdown.innerHTML = "";
+
+    for (const attachment of mail?.attachments || []) {
+      const link = document.createElement("a");
+      link.href = attachment.url;
+      link.innerHTML = attachment.name;
+      dropdown.append(link);
+    }
+
+    if (!mail?.body_html && self.content_mode === "html")
+      self.content_mode = "plain";
+
+    await self.visibility();
+  }
+
+  async send_mail() {
+    const headers = {};
+    for (const key of this.fixed_headers)
+      headers[key] = document.querySelector(`#editor-${key} input`).value;
+
+    for (const row of document.querySelectorAll("#editor .header .extra")) {
+      const inputs = row.querySelectorAll("input");
+      if (inputs.length < 2)
+        continue;
+
+      const key = inputs[0].value.trim().toLowerCase();
+      const value = inputs[1].value.trim().toLowerCase();
+      if (key && value && !this.fixed_headers.includes(key))
+        headers[key] = value;
+    }
+
+    const attachments = [];
+    for (const file of document.querySelector("#editor-attachments input").files) {
+      attachments.push({
+        size: file.size,
+        mimetype: file.type,
+        name: file.name,
+        content: await file_to_base64(file),
+      });
+    }
+
+    await this.socket_send({
+      command: "send_mail",
+      account: this.account_name,
+      mailbox: this.mailbox_name,
+      mail: {
+        header: headers,
+        body: document.querySelector("#editor-content textarea").value,
+        attachments: attachments,
+      },
+    });
+
+    document.querySelector("#editor").classList.add("hidden");
+    await this.reset_editor();
+  }
+
+  async on_send_mail() {
+    await this.load_mailbox();
+  }
+
+  async load_random_mail() {
+    if (!this.account_name || !this.mailbox_name)
+      return;
+
+    await this.socket_send(
+      {
+        command: "random_mail",
+        account: this.account_name,
+        mailbox: this.mailbox_name,
+      }
+    );
+  }
+
+  async on_random_mail(data) {
+    await this.reset_editor(data?.mail?.header || {}, data?.mail?.body_plain || "");
+    document.querySelector("#editor").classList.remove("hidden");
+  }
+
+  async load_reply_mail() {
+    if (!this.mailbox_name || !this.mail_uid)
+      return;
+
+    await this.socket_send(
+      {
+        command: "reply_mail",
+        account: this.account_name,
+        mailbox: this.mailbox_name,
+        uid: this.mail_uid,
+      }
+    );
+  }
+
+  async on_reply_mail(data) {
+    await this.reset_editor(data?.mail?.header || {});
+    document.querySelector("#editor").classList.remove("hidden");
   }
 
   async _mail_row_fill(row, msg) {
@@ -187,7 +490,7 @@ class MailClient {
     row.querySelector(".read input").addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      self._mail_row_click(ev.target, "read");
+      self._mail_row_click(ev.target, "seen");
     });
 
     row.querySelector(".deleted input").addEventListener("click", (ev) => {
@@ -224,101 +527,13 @@ class MailClient {
 
         self.mail_selected = row;
         self.mail_selected.classList.add("selected");
-        await self.fetch_mail(row.uid);
+        await self.load_mail(row.uid);
         break;
 
-      case "read":
-        await self.set_flag("seen", element.checked ? "PUT" : "DELETE", row.uid);
+      case "seen": case "deleted":
+        await self.flag_mail(type, element.checked ? "set" : "unset", row.uid);
         element.checked = !element.checked;
         break;
-
-      case "deleted":
-        await self.set_flag("deleted", element.checked ? "PUT" : "DELETE", row.uid);
-        element.checked = !element.checked;
-        break;
-    }
-  }
-
-  async load_config() {
-    const data = await this.fetch_json("/config");
-    if (data !== null)
-      this.config = data;
-  }
-
-  async upload_files(element) {
-    const files = [];
-    for (const file of element.files) {
-      files.push({name: file.name, data: await file.text()});
-    }
-
-    await this.post_data(files, "upload", this.user_id, this.mailbox_id);
-
-    // Clear the files
-    element.value = null;
-  }
-
-  async fetch_accounts() {
-    const self = this;
-    const data = await this.fetch_data();
-    if (data === null)
-      return;
-
-    for (const opt of this.users.options) {
-      const user = data[opt.value];
-      if (user !== undefined)
-        delete data[opt.value];
-      else
-        opt.remove();
-    }
-
-    for (const uid in data)
-      this.users.add(new Option(data[uid], uid));
-
-    if (this.users.selectedIndex < 0) {
-      this.users.selectedIndex = 0;
-      if (this.users.options[0]) {
-        await self.fetch_mailboxes(this.users.options[0].value);
-      }
-    } else {
-      const selected = this.users.options[this.users.selectedIndex].value;
-      if (this.user_id !== selected) {
-        await self.fetch_mailboxes(selected);
-      }
-    }
-  }
-
-  async fetch_mailboxes(user_id) {
-    const self = this;
-    const data = await this.fetch_data(user_id);
-    if (data === null)
-      return;
-
-    if (this.user_id !== user_id) {
-      this.mailbox_id = null;
-      this.mail_uid = null;
-      this.mailbox.innerHTML = "";
-      this.mailboxes.selectedIndex = -1;
-    }
-
-    this.user_id = user_id;
-
-    for (const opt of this.mailboxes.options) {
-      const name = data[opt.uid];
-      if (name)
-        data.splice(idx, 1);
-      else
-        opt.remove()
-    }
-
-    for (const uid in data) {
-      this.mailboxes.add(new Option(data[uid], uid, true, this.mailbox_id === uid));
-    }
-
-    if (this.mailboxes.selectedIndex < 0) {
-      this.mailboxes.selectedIndex = 0;
-      if (this.mailboxes.options[0]) {
-        await self.fetch_mailbox(this.mailboxes.options[0].value);
-      }
     }
   }
 
@@ -331,86 +546,6 @@ class MailClient {
     document.querySelector("#content textarea#source").value = data?.content || "";
     document.querySelector("#content textarea#plain").value = data?.body_plain || "";
     document.querySelector("#content iframe#html").srcdoc = data?.body_html || "";
-  }
-
-  async fetch_mailbox(mailbox_id) {
-    const self = this;
-    const data = await this.fetch_data(this.user_id, mailbox_id);
-    if (data === null)
-      return;
-
-    if (this.mailbox_id !== mailbox_id) {
-      this.mail_uid = null;
-      this.mailbox.innerHTML = "";
-
-      // on change of mailbox, do clear mail display
-      this._display_mail(undefined);
-    }
-
-    this.mailbox_id = mailbox_id;
-    const missing_msg = [];
-    const uids = [];
-    const lines = [];
-    for (const msg of data) {
-      uids.push(msg.uid);
-
-      let found = false;
-      for (const line of this.mailbox.children) {
-        if (line.uid === msg.uid) {
-          found = true;
-          await self._mail_row_fill(line, msg);
-          lines.push(line);
-          break;
-        }
-      }
-
-      if (!found)
-        missing_msg.push(msg);
-    }
-
-    const template = document.querySelector("#mail-row-template");
-    for (const msg of missing_msg) {
-      const row = await self._mail_row_init(template, msg);
-
-      row.uid = msg.uid;
-      await self._mail_row_fill(row, msg);
-      lines.push(row);
-    }
-
-    for (const line of lines) {
-      if (uids.indexOf(line.uid) < 0 && line !== template)
-        line.remove();
-    }
-
-    if (this.sort_asc) lines.reverse();
-    for (const line of lines)
-      this.mailbox.append(line);
-  }
-
-  async fetch_mail(uid) {
-    const self = this;
-    const data = await this.fetch_data(this.user_id, this.mailbox_id, uid);
-    if (data === null)
-      return;
-
-    self.mail_uid = uid;
-
-    self._display_mail(data);
-
-    const dropdown = document.querySelector("#btn-dropdown div");
-    dropdown.innerHTML = "";
-
-    for (const attachment of data?.attachments || []) {
-      const link = document.createElement("a");
-      link.href = `/api/${this.user_id}/${this.mailbox_id}/${uid}/attachment/${attachment}`;
-      link.innerHTML = attachment;
-      dropdown.append(link);
-    }
-
-    if (!data?.body_html && self.content_mode === "html")
-      self.content_mode = "plain";
-
-    await self.visibility();
   }
 
   async add_header(key = null, value = null) {
@@ -456,57 +591,7 @@ class MailClient {
       element.classList.remove("asc");
     }
 
-    if (this.mailbox_id) await this.fetch_mailbox(this.mailbox_id);
-  }
-
-  async send_mail() {
-    const headers = {};
-    for (const key of this.fixed_headers)
-      headers[key] = document.querySelector(`#editor-${key} input`).value;
-
-    for (const row of document.querySelectorAll("#editor .header .extra")) {
-      const inputs = row.querySelectorAll("input");
-      if (inputs.length < 2)
-        continue;
-
-      const key = inputs[0].value.trim().toLowerCase();
-      const value = inputs[1].value.trim().toLowerCase();
-      if (key && value && !this.fixed_headers.includes(key))
-        headers[key] = value;
-    }
-
-    const attachments = [];
-    for (const file of document.querySelector("#editor-attachments input").files) {
-      attachments.push({
-        size: file.size,
-        mimetype: file.type,
-        name: file.name,
-        content: await file_to_base64(file),
-      });
-    }
-
-    await this.post_data({
-      header: headers,
-      body: document.querySelector("#editor-content textarea").value,
-      attachments: attachments,
-    }, this.user_id, this.mailbox_id);
-
-    document.querySelector("#editor").classList.add("hidden");
-    await this.reset_editor();
-  }
-
-  async reply_mail() {
-    if (!this.mailbox_id || !this.mail_uid)
-      return;
-
-    const data = await this.fetch_data(
-      this.user_id, this.mailbox_id, this.mail_uid, "reply"
-    );
-    if (data === null)
-      return;
-
-    await this.reset_editor(data.header || {});
-    document.querySelector("#editor").classList.remove("hidden");
+    if (this.mailbox_name) await this.load_mailbox(this.mailbox_name);
   }
 
   async reset_editor(header = null, body = null) {
@@ -530,66 +615,159 @@ class MailClient {
 
   async initialize() {
     const self = this;
+
     this.mailboxes.addEventListener("change", (ev) => {
       ev.preventDefault();
-      self.fetch_mailbox(ev.target.value);
+      self.load_mailbox(ev.target.value);
     });
+
     document.getElementById("btn-html").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.content_mode = "html";
       self.visibility();
     });
+
     document.getElementById("btn-plain").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.content_mode = "plain";
       self.visibility();
     });
+
     document.getElementById("btn-source").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.content_mode = "source";
       self.visibility();
     });
+
     document.getElementById("btn-new").addEventListener("click", (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.remove("hidden");
     });
+
+    document.getElementById("btn-random").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.load_random_mail();
+    });
+
     document.getElementById("btn-cancel").addEventListener("click", (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.add("hidden");
       self.reset_editor();
     });
+
     document.getElementById("btn-send").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.send_mail();
     });
+
     document.getElementById("btn-reply").addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.reply_mail();
+      self.load_reply_mail();
     });
+
     document.getElementById("btn-advanced").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.editor_mode = (self.editor_mode === "simple") ? "advanced" : "simple";
       self.visibility();
     });
+
     document.getElementById("btn-add-header").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.add_header();
     });
+
     document.querySelector("#color-scheme").addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.swap_theme();
+      const toggle = document.querySelector("#color-scheme input");
+      if (toggle.checked) {
+        document.documentElement.classList.add("light");
+        document.documentElement.classList.remove("dark");
+      } else {
+        document.documentElement.classList.add("dark");
+        document.documentElement.classList.remove("light");
+      }
+
+      toggle.checked = !toggle.checked;
     });
+
+    document.querySelector("#connection").addEventListener("click", (ev) => {
+      ev.preventDefault();
+
+      const toggle = document.querySelector("#connection input");
+      if (toggle.checked)
+        self.close_socket();
+      else
+        self.connect_socket();
+
+      toggle.checked = !toggle.checked;
+    });
+
     document.querySelector("#uploader input").addEventListener("change", (ev) => {
       ev.preventDefault();
       self.upload_files(ev.target);
     });
+
     document.querySelector("#mailbox .date").addEventListener("click", (ev) => {
       ev.preventDefault();
       self.reorder(!self.sort_asc);
     });
 
-    await this.load_config();
+    document.querySelector("#nav-dragbar").addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      self.drag.nav = true;
+      self.wrapper.style.cursor = "ew-resize";
+    });
+
+    document.querySelector("#mailbox-dragbar").addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      self.drag.mailbox = true;
+      self.wrapper.style.cursor = "ns-resize";
+    });
+
+    this.wrapper.addEventListener("mouseup", self.reset_drag.bind(self));
+    this.wrapper.addEventListener("mousemove", (ev) => {
+      ev.preventDefault();
+      self.ondrag(ev);
+    });
+
     await this.visibility();
     await this.idle();
+  }
+
+  reset_drag() {
+    this.drag = {nav: false, mailbox: false};
+    self.wrapper.style.cursor = "auto";
+  }
+
+  ondrag(ev) {
+    if (this.drag.nav) {
+      const dragbar = document.querySelector("#nav-dragbar");
+      const width = clamp(event.clientX, 250, 300);
+      const sizes = [
+        `${width}px`,
+        `${dragbar.clientWidth}px`,
+        "auto",
+      ];
+
+      this.wrapper.style.gridTemplateColumns = sizes.join(" ");
+    }
+
+    if (this.drag.mailbox) {
+      const dragbar = document.querySelector("#mailbox-dragbar");
+      const header = document.querySelector("#header");
+      const height = clamp(
+        event.clientY,
+        50,
+        this.wrapper.clientHeight - header.clientHeight - dragbar.clientHeight,
+      );
+      const sizes = [
+        `${height}px`,
+        `${dragbar.clientHeight}px`,
+        `${header.clientHeight}px`,
+        "auto",
+      ];
+
+      this.wrapper.style.gridTemplateRows = sizes.join(" ");
+    }
   }
 }
