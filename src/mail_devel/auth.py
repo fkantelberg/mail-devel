@@ -25,7 +25,7 @@ class IMAPAuthenticator(Login):
         if authcid not in self.users_dict:
             self.users_dict[authcid] = UserMetadata(self.config, authcid)
 
-        if self.multi_user:
+        if self.multi_user and isinstance(credentials, PlainCredentials):
             credentials = PlainCredentials(self.config.demo_user, credentials._secret)
 
         ident = await super().authenticate(credentials)

@@ -18,4 +18,3 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-disable_error_code = 'attr-defined,import,union-attr'

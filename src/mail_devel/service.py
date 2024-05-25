@@ -105,6 +105,7 @@ class Service:
             flagged_seen=args.flagged_seen or args.smtp_flagged_seen,
             ensure_message_id=not args.no_message_id or not args.smtp_no_message_id,
             multi_user=args.multi_user,
+            responder=args.smtp_responder,
         )
         service.smtp = Controller(
             service.handler,
@@ -161,10 +162,12 @@ class Service:
             loop.create_task(self.frontend.start())
 
         async with AsyncExitStack() as stack:
-            await self.backend.start(stack)
-            await self.imap.start(stack)
-
-            self.smtp.start()
+            if self.backend:
+                await self.backend.start(stack)
+            if self.imap:
+                await self.imap.start(stack)
+            if self.smtp:
+                self.smtp.start()
             if self.smtps:
                 self.smtps.start()
 
@@ -300,6 +303,10 @@ class Service:
             "--smtp-no-message-id",
             action="store_true",
             help="Ensure that a Message-ID exists via SMTP",
+        )
+        group.add_argument(
+            "--smtp-responder",
+            help="Automatically respond to received mails",
         )
 
         group = parser.add_argument_group("Options")

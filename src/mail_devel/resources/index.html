@@ -12,7 +12,10 @@
 <body>
   <div id="wrapper">
     <div id="nav" class="container">
-      <div id="logo">mail<span class="highlight">devel</span></div>
+      <div id="logo">
+        mail<span class="highlight">devel</span>
+        <div id="version"></div>
+      </div>
 
       <div id="nav-options">
         <div id="connection" class="switch">
@@ -32,7 +35,7 @@
         </div>
       </div>
 
-      <select id="accounts" name="accounts"></select>
+      <select id="accounts" name="accounts" class="hidden"></select>
 
       <button id="btn-new" type="button">Send Mail</button>
       <label id="uploader" class="btn">
@@ -53,8 +56,7 @@
           <tr>
             <th class="summary">Summary</th>
             <th class="date"><span class="ordering"></span> Date</th>
-            <th class="read">Read</th>
-            <th class="deleted">Deleted</th>
+            <th class="flags">Flags</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -74,11 +76,15 @@
               </table>
             </td>
             <td class="date"></td>
-            <td class="read">
-              <input type="checkbox" />
-            </td>
-            <td class="deleted">
-              <input type="checkbox" />
+            <td class="flags">
+              <div class="btn read">
+                <input type="checkbox" class="hidden">
+                <span>Read</span>
+              </div>
+              <div class="btn deleted">
+                <input type="checkbox" class="hidden">
+                <span>Deleted</span>
+              </div>
             </td>
           </tr>
         </tfoot>

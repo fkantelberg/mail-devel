@@ -14,4 +14,13 @@ repos:
     rev: v1.3.0
     hooks:
       - id: mypy
-        args: [--disable-error-code, attr-defined, --disable-error-code, union-attr]
+        # args: [--disable-error-code, union-attr]
+        additional_dependencies:
+          - aiohttp
+          - aiosmtpd
+          - nox
+          - passlib
+          - pymap~=0.36
+          - pytest
+          - setuptools
+          - typing-extensions

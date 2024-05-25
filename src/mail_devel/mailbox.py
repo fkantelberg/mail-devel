@@ -3,8 +3,7 @@ from datetime import datetime
 from email.message import Message
 from email.utils import getaddresses
 
-from pymap.backend.dict import FilterSet, MailboxData, MailboxSet
-from pymap.imap import IMAPConfig
+from pymap.backend.dict import Config, FilterSet, MailboxData, MailboxSet
 from pymap.parsing.message import AppendMessage
 from pymap.parsing.specials.flag import Flag
 
@@ -23,17 +22,15 @@ class TestMailboxSet(MailboxSet):
 class TestMailboxDict:
     """Class to handle all mailbox accounts"""
 
-    def __init__(
-        self, config: IMAPConfig, filter_set: FilterSet, multi_user: bool = False
-    ):
-        self.config: IMAPConfig = config
+    def __init__(self, config: Config, filter_set: FilterSet, multi_user: bool = False):
+        self.config: Config = config
         self.filter_set: FilterSet = filter_set
         self.multi_user: bool = multi_user
 
     def __contains__(self, user: str) -> bool:
         return not self.multi_user or user in self.config.set_cache
 
-    def __getitem__(self, user: str) -> TestMailboxSet:
+    def __getitem__(self, user: str) -> MailboxSet:
         return self.config.set_cache[user][0]
 
     async def inbox_stats(self) -> dict[str, int]:
@@ -50,7 +47,7 @@ class TestMailboxDict:
 
         return list(self.config.set_cache)
 
-    async def get(self, user: str) -> TestMailboxSet:
+    async def get(self, user: str) -> MailboxSet:
         """Get the mailbox for the user or the main mailbox if single user mode"""
         if not self.multi_user:
             user = self.config.demo_user
@@ -69,12 +66,12 @@ class TestMailboxDict:
 
         # Strip BCC header and collect the mail addresses
         addresses: set[str] = set()
-        for header, value in list(message._headers):
+        for header, value in message.items():
             if value and header.lower() in ("to", "cc", "bcc"):
                 addresses.update(x.strip() for x in value.split(","))
 
             if header.lower() == "bcc":
-                message._headers.remove((header, value))
+                message._headers.remove((header, value))  # type: ignore
 
         append_msg = AppendMessage(
             literal=str(message).encode(),
@@ -90,6 +87,6 @@ class TestMailboxDict:
 
         for _, address in getaddresses(list(addresses)):
             if address:
-                mailboxset = await self.get(address)
-                mbox = await mailboxset.get_mailbox(mailbox)
+                account = await self.get(address)
+                mbox = await account.get_mailbox(mailbox)
                 await mbox.append(append_msg)

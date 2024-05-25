@@ -12,6 +12,7 @@ import pytest
 from aiohttp import ClientSession
 from mail_devel import Service
 from mail_devel import __main__ as main
+from mail_devel.smtp import Flag
 
 MAIL = """
 Content-Type: multipart/mixed; boundary="------------6S5GIA0a7bmD9z4YzFLV1oIL"
@@ -284,7 +285,7 @@ async def test_http_reply():
             assert data["command"] == "reply_mail"
             msg = data["data"]["mail"]
             assert msg["header"]["to"] == "test <test@example.org>"
-            assert msg["header"]["message-id"].endswith("@mail-devel")
+            assert "@mail-devel" in msg["header"]["message-id"]
 
             await ws.send_json(
                 {
@@ -468,6 +469,18 @@ async def test_smtp_auth():
             "localhost", port=port
         ) as smtp:
             smtp.login("invalid", pw)
+
+        service.handler.load_responder("reply_once")
+        service.handler.flagged_seen = True
+        assert callable(service.handler.responder)
+        with SMTP("localhost", port=port) as smtp:
+            smtp.login("test", pw)
+            smtp.sendmail("test@example.org", "test@example.org", MAIL)
+
+        msgs = [msg async for msg in mailbox.messages()]
+        assert len(msgs) == 4
+        assert Flag(b"\\Seen") in msgs[-2].permanent_flags
+        assert Flag(b"\\Seen") not in msgs[-1].permanent_flags
 
 
 @pytest.mark.asyncio

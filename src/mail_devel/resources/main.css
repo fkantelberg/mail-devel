@@ -94,7 +94,7 @@ button, .btn {
 .highlight {color: var(--special)}
 .selected {background-color: var(--highlight)}
 .unseen .subject {font-weight: bold}
-.is_deleted .subject {font-style: italic}
+.deleted .subject {text-decoration: line-through;}
 .italic {font-style: italic}
 .no-overflow {
   overflow-x: hidden;
@@ -108,8 +108,6 @@ button, .btn {
   display: flex;
   flex-direction: column;
   grid-area: nav;
-  overflow: auto;
-  resize: horizontal;
   padding: 0 15px;
 }
 #header {
@@ -157,13 +155,23 @@ button, .btn {
 #mailbox table.additional td {
   border: 0;
 }
-#mailbox td.read, #mailbox td.deleted {
-  text-align: center;
+#mailbox td.flags {
+  text-align: left;
+}
+#mailbox td.flags div {
+  cursor: pointer;
+  margin: 2px;
+}
+#mailbox td.flags .btn {
+  padding: 0 2pt;
+}
+#mailbox td.flags input:not(:checked) + span {
+  text-decoration: 3px line-through;
 }
 #mailbox tr:hover {
   background-color: var(--highlight)
 }
-#mailbox .date, #mailbox .read, #mailbox .deleted {
+#mailbox .date, #mailbox .flags {
   padding: 0 4px;
   text-align: right;
   width: 1px;
@@ -190,6 +198,13 @@ button, .btn {
   font-size: 20pt;
   padding: 5% 0;
   text-align: center;
+}
+#version {
+  font-family: monospace;
+  font-size: 7pt;
+  text-align: right;
+  line-height: 1.0;
+  height: 1em;
 }
 
 .header {
@@ -285,6 +300,7 @@ button, .btn {
 #editor-header th, #editor-attachments th {
   position: relative;
   min-width: 150px;
+  max-width: 150px;
 }
 #editor-buttons button {
   padding: 5pt 2pt;

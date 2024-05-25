@@ -1,3 +1,4 @@
 from .service import Service
+from .utils import VERSION
 
-VERSION = "0.11.0"
+__all__ = ["Service", "VERSION"]

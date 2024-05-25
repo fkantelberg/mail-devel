@@ -53,19 +53,47 @@ class MailClient {
 
     this.connect_socket();
 
-    const toggle = document.querySelector("#color-scheme input");
-    if (document.documentElement.classList.contains("dark"))
-      toggle.checked = true;
-    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
-      toggle.checked = true
-    else
-      toggle.checked = false
+    this.load_color_scheme();
 
-    this.reorder(false);
+    this.apply_drag(
+      parseInt(localStorage.getItem("drag-nav")),
+      parseInt(localStorage.getItem("drag-mailbox")),
+    );
+
+    this.reorder(localStorage.getItem("sort") === "asc");
+  }
+
+  async load_color_scheme() {
+    const toggle = document.querySelector("#color-scheme input");
+    const scheme = localStorage.getItem("color-scheme");
+    if (scheme)
+      toggle.checked = scheme === "dark";
+    else {
+      toggle.checked = (
+        document.documentElement.classList.contains("dark") ||
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      );
+
+      localStorage.setItem("color-scheme", toggle.checked ? "dark" : "light");
+    }
+
+    await this.apply_color_scheme();
+  }
+
+  async apply_color_scheme() {
+    const toggle = document.querySelector("#color-scheme input");
+    if (toggle.checked) {
+      localStorage.setItem("color-scheme", "dark");
+      document.documentElement.classList.add("dark");
+      document.documentElement.classList.remove("light");
+    } else {
+      localStorage.setItem("color-scheme", "light");
+      document.documentElement.classList.add("light");
+      document.documentElement.classList.remove("dark");
+    }
   }
 
   async visibility() {
-    vis("#accounts", Boolean(this.config?.multi_user));
     vis("#btn-html", this.content_mode !== "html");
     vis("#btn-plain", this.content_mode !== "plain");
     vis("#btn-source", this.content_mode !== "source");
@@ -92,22 +120,6 @@ class MailClient {
       await this.load_mailbox();
 
     setTimeout(() => {self.idle();}, 2000);
-  }
-
-  async flag_mail(flag, method, uid = null) {
-    const mail_uid = uid || this.mail_uid;
-    if (this.mailbox_name && mail_uid) {
-      await this.socket_send(
-        {
-          command: "flag_mail",
-          account: this.account_name,
-          mailbox: this.mailbox_name,
-          uid: uid,
-          method: method,
-          flag: flag
-        }
-      );
-    }
   }
 
   connect_socket() {
@@ -171,6 +183,25 @@ class MailClient {
 
   async on_config(data) {
     this.config = data;
+
+    vis("#accounts", Boolean(this.config?.multi_user));
+    document.querySelector("#version").innerHTML = this.config?.version || "";
+  }
+
+  async flag_mail(flag, method, uid = null) {
+    const mail_uid = uid || this.mail_uid;
+    if (this.mailbox_name && mail_uid) {
+      await this.socket_send(
+        {
+          command: "flag_mail",
+          account: this.account_name,
+          mailbox: this.mailbox_name,
+          uid: uid,
+          method: method,
+          flag: flag
+        }
+      );
+    }
   }
 
   async upload_files(element) {
@@ -454,20 +485,22 @@ class MailClient {
   async _mail_row_fill(row, msg) {
     const self = this;
 
+    let ele = row.querySelector("td.flags .read input");
     if ((msg?.flags || []).indexOf("seen") < 0) {
       row.classList.add("unseen");
-      row.querySelector("td.read input").checked = false;
+      ele.checked = false;
     } else {
       row.classList.remove("unseen");
-      row.querySelector("td.read input").checked = true;
+      ele.checked = true;
     }
 
+    ele = row.querySelector("td.flags .deleted input");
     if ((msg?.flags || []).indexOf("deleted") < 0) {
-      row.classList.remove("is_deleted");
-      row.querySelector("td.deleted input").checked = false;
+      row.classList.remove("deleted");
+      ele.checked = false;
     } else {
-      row.classList.add("is_deleted");
-      row.querySelector("td.deleted input").checked = true;
+      row.classList.add("deleted");
+      ele.checked = true;
     }
 
     function content(selector, val) {
@@ -477,7 +510,8 @@ class MailClient {
     content(".from", msg.header?.from);
     content(".to", msg.header?.to);
     content(".subject", msg.header?.subject);
-    content(".date", (new Date(msg.date)).toLocaleString());
+    const dt = new Date(msg.date);
+    row.querySelector(".date").innerHTML = `${dt.toLocaleDateString()}<br />${dt.toLocaleTimeString()}`;
   }
 
   async _mail_row_init(template, msg) {
@@ -487,13 +521,13 @@ class MailClient {
     row.removeAttribute("id");
     row.classList.remove("hidden");
 
-    row.querySelector(".read input").addEventListener("click", (ev) => {
+    row.querySelector("td.flags .read").addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       self._mail_row_click(ev.target, "seen");
     });
 
-    row.querySelector(".deleted input").addEventListener("click", (ev) => {
+    row.querySelector("td.flags .deleted").addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       self._mail_row_click(ev.target, "deleted");
@@ -679,15 +713,8 @@ class MailClient {
     document.querySelector("#color-scheme").addEventListener("click", (ev) => {
       ev.preventDefault();
       const toggle = document.querySelector("#color-scheme input");
-      if (toggle.checked) {
-        document.documentElement.classList.add("light");
-        document.documentElement.classList.remove("dark");
-      } else {
-        document.documentElement.classList.add("dark");
-        document.documentElement.classList.remove("light");
-      }
-
       toggle.checked = !toggle.checked;
+      self.apply_color_scheme();
     });
 
     document.querySelector("#connection").addEventListener("click", (ev) => {
@@ -709,6 +736,7 @@ class MailClient {
 
     document.querySelector("#mailbox .date").addEventListener("click", (ev) => {
       ev.preventDefault();
+      localStorage.setItem("sort", self.sort_asc ? "desc" : "asc");
       self.reorder(!self.sort_asc);
     });
 
@@ -739,35 +767,43 @@ class MailClient {
     self.wrapper.style.cursor = "auto";
   }
 
-  ondrag(ev) {
-    if (this.drag.nav) {
+  apply_drag(nav=null, mailbox=null) {
+    if (nav) {
+      const pos = clamp(nav, 250, 300);
       const dragbar = document.querySelector("#nav-dragbar");
-      const width = clamp(event.clientX, 250, 300);
       const sizes = [
-        `${width}px`,
+        `${pos}px`,
         `${dragbar.clientWidth}px`,
         "auto",
       ];
-
       this.wrapper.style.gridTemplateColumns = sizes.join(" ");
     }
 
-    if (this.drag.mailbox) {
+    if (mailbox) {
       const dragbar = document.querySelector("#mailbox-dragbar");
       const header = document.querySelector("#header");
-      const height = clamp(
-        event.clientY,
-        50,
-        this.wrapper.clientHeight - header.clientHeight - dragbar.clientHeight,
-      );
+      const max_height = this.wrapper.clientHeight - header.clientHeight - dragbar.clientHeight;
+      const pos = clamp(mailbox, 50, max_height);
       const sizes = [
-        `${height}px`,
+        `${pos}px`,
         `${dragbar.clientHeight}px`,
         `${header.clientHeight}px`,
         "auto",
       ];
 
       this.wrapper.style.gridTemplateRows = sizes.join(" ");
+    }
+  }
+
+  ondrag(ev) {
+    if (this.drag.nav) {
+      localStorage.setItem("drag-nav", event.clientX);
+      this.apply_drag(nav=event.clientX, null);
+    }
+
+    if (this.drag.mailbox) {
+      localStorage.setItem("drag-mailbox", event.clientY);
+      this.apply_drag(null, mailbox=event.clientY);
     }
   }
 }

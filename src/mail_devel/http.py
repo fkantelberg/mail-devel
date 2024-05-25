@@ -7,6 +7,7 @@ import ssl
 import uuid
 from email import header, message_from_bytes, message_from_string, policy
 from email.errors import MessageDefect
+from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -16,11 +17,13 @@ from typing import Tuple
 import aiohttp
 from aiohttp import web
 from aiohttp.web import Request, Response, WebSocketResponse
-from pymap.backend.dict.mailbox import Message
+from pymap.backend.dict.mailbox import Message as PyMapMessage
 from pymap.parsing.specials import FetchRequirement
 from pymap.parsing.specials.flag import Flag
 
+from .builder import Builder
 from .mailbox import TestMailboxDict
+from .utils import VERSION
 
 _logger = logging.getLogger(__name__)
 
@@ -54,6 +57,7 @@ async def run_app(
         ssl_context=ssl_context,
     )
     await site.start()
+    return app
 
 
 class Frontend:
@@ -94,7 +98,7 @@ class Frontend:
 
         return res.read_text(encoding="utf-8")
 
-    async def start(self) -> None:
+    async def start(self) -> web.AppRunner:
         self.api = web.Application(client_max_size=self.client_max_size)
 
         self.api.add_routes(
@@ -168,7 +172,7 @@ class Frontend:
             _logger.error(f"File {static!r} not in resources")
             raise web.HTTPNotFound() from e
 
-    async def _message_content(self, msg: Message) -> bytes:
+    async def _message_content(self, msg: PyMapMessage) -> bytes:
         return bytes((await msg.load_content(FetchRequirement.CONTENT)).content)
 
     def message_hash(self, content: bytes | str) -> str:
@@ -178,11 +182,20 @@ class Frontend:
         return hashlib.sha512(content).hexdigest()
 
     async def _convert_message(
-        self, msg: Message, *, account: str, mailbox: str, full: bool = False
+        self,
+        msg: PyMapMessage,
+        *,
+        account: str,
+        mailbox: str,
+        full: bool = False,
+        message: Message | None = None,
     ) -> dict:
-        content = await self._message_content(msg)
+        if not message:
+            content = await self._message_content(msg)
+            message = message_from_bytes(content)
+        else:
+            content = message.as_bytes()
 
-        message = message_from_bytes(content)
         result = {
             "uid": msg.uid,
             "flags": flags_to_api(msg.permanent_flags),
@@ -196,7 +209,7 @@ class Frontend:
         msg_hash = self.message_hash(content)
         self.mail_cache[msg_hash] = (account, mailbox, msg.uid)
 
-        result["attachments"] = []
+        attachments = []
         if message.is_multipart():
             for part in message.walk():
                 ctype = part.get_content_type()
@@ -204,7 +217,7 @@ class Frontend:
 
                 if cdispo == "attachment":
                     name = part.get_filename()
-                    result["attachments"].append(
+                    attachments.append(
                         {"name": name, "url": f"/attachment/{msg_hash}/{name}"}
                     )
                 elif ctype == "text/plain":
@@ -216,6 +229,7 @@ class Frontend:
         else:
             result["body_plain"] = message.get_payload(decode=True).decode()
 
+        result["attachments"] = attachments
         result["content"] = bytes(content).decode()
         return result
 
@@ -226,6 +240,7 @@ class Frontend:
                 "data": {
                     "multi_user": self.multi_user,
                     "flagged_seen": self.flagged_seen,
+                    "version": VERSION,
                 },
             }
         )
@@ -315,9 +330,9 @@ class Frontend:
     ) -> None:
         headers = {
             "subject": f"Random Subject [{secrets.token_hex(8)}]",
-            "message-id": f"{uuid.uuid4()}@mail-devel",
+            "message-id": Builder.message_id(),
             "to": account,
-            "from": f"{secrets.token_hex(8)}@mail-devel",
+            "from": Builder.mail_address(),
         }
         _logger.info("Randomized mail")
         await ws.send_json(
@@ -344,26 +359,16 @@ class Frontend:
 
         async for msg in mbox.messages():
             if msg.uid == uid:
+                content = await self._message_content(msg)
+                reply = Builder.reply_mail(message_from_bytes(content))
+
                 message = await self._convert_message(
                     msg,
                     account=account,
                     mailbox=mailbox,
                     full=True,
+                    message=reply,
                 )
-
-                headers = message["header"]
-                headers["subject"] = f"RE: {headers['subject']}"
-                msg_id = headers.get("message-id", None)
-                if msg_id:
-                    headers["in-reply-to"] = msg_id
-                    headers["references"] = f"{msg_id} {headers.get('references', '')}"
-                headers["message-id"] = f"{uuid.uuid4()}@mail-devel"
-                headers["to"] = headers["from"]
-                headers["from"] = self.user
-                headers.pop("content-type", None)
-                for key in list(headers):
-                    if key.startswith("x-"):
-                        headers.pop(key, None)
 
                 await ws.send_json(
                     {
@@ -428,7 +433,7 @@ class Frontend:
                 msg = message_from_string(mail["data"], policy=compat_strict)
 
                 if not msg["Message-Id"] and self.ensure_message_id:
-                    msg.add_header("Message-Id", f"{uuid.uuid4()}@mail-devel")
+                    msg.add_header("Message-Id", Builder.message_id())
 
                 await self.mailboxes.append(
                     msg,
@@ -462,7 +467,7 @@ class Frontend:
                 message.add_header(key.title(), value)
 
         if not message["Message-Id"] and self.ensure_message_id:
-            message.add_header("Message-Id", f"{uuid.uuid4()}@mail-devel")
+            message.add_header("Message-Id", Builder.message_id())
 
         for att in mail.get("attachments", []):
             part = MIMEBase(*(att["mimetype"] or "text/plain").split("/"))
@@ -514,8 +519,8 @@ class Frontend:
                 return web.Response(
                     body=body,
                     headers={
-                        "Content-Type": part.get("Content-Type"),
-                        "Content-Disposition": part.get("Content-Disposition"),
+                        "Content-Type": part.get("Content-Type", ""),
+                        "Content-Disposition": part.get("Content-Disposition", ""),
                     },
                 )
 
