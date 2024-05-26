@@ -1,6 +1,9 @@
 import importlib
+import importlib.util
 import logging
+import os
 from email.message import Message
+from types import ModuleType
 from typing import Callable, Iterable, Type
 
 from aiosmtpd.handlers import AsyncMessage
@@ -56,18 +59,43 @@ class MemoryHandler(AsyncMessage):
                 result.append(flag)
         return frozenset(result)
 
+    def _load_responder_from_file(self, responder: str) -> ModuleType | None:
+        if not os.path.isfile(responder):
+            return None
+
+        try:
+            spec = importlib.util.spec_from_file_location("autorespond", responder)
+            if not spec or not spec.loader:
+                return None
+
+            script = importlib.util.module_from_spec(spec)
+            if not script:
+                return None
+
+            spec.loader.exec_module(script)
+            return script
+        except ImportError:
+            return None
+
     def load_responder(self, responder: str | None = None) -> None:
         if not responder:
             return
 
         try:
             script = importlib.import_module(f".automation.{responder}", __package__)
+            _logger.info(f"Loaded auto responder .automation.{responder}")
         except ImportError:
-            return
+            script = None
 
-        reply = getattr(script, "reply", None)
-        if callable(reply):
-            self.responder = reply
+        if not script:
+            script = self._load_responder_from_file(responder)
+            if script:
+                _logger.info(f"Loaded auto responder {responder}")
+
+        if script:
+            reply = getattr(script, "reply", None)
+            if callable(reply):
+                self.responder = reply
 
     async def auto_respond(self, message: Message) -> None:
         if not callable(self.responder):

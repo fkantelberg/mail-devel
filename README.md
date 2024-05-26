@@ -13,6 +13,14 @@ like Thunderbird for more advanced usage.
 
 DO NOT USE FOR PRODUCTION.
 
+### Features
+
+- Generate random mails
+- Receive, send mails and reply to mails
+- Generate randomized mails
+- Manage IMAP flags and automated flagging
+- SMTP auto respond feature for automatic testing
+
 ### Supported
 
 - SMTP (optionally with STARTTLS)

@@ -306,7 +306,10 @@ class Service:
         )
         group.add_argument(
             "--smtp-responder",
-            help="Automatically respond to received mails",
+            help="Automatically respond to received mails. Possible options are "
+            "pre-defined scripts like reply_once or reply_always or a path to "
+            "python script with the defined reply() function. See the source of the "
+            "pre-defined scripts for the interface definition",
         )
 
         group = parser.add_argument_group("Options")
