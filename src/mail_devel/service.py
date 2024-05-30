@@ -8,8 +8,9 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from typing import AsyncGenerator
 
 from aiosmtpd.controller import Controller
-from pymap.backend.dict import Config, DictBackend, FilterSet
-from pymap.imap import IMAPConfig, IMAPService
+from pymap.backend.dict import Config, DictBackend
+from pymap.backend.dict.filter import FilterSet
+from pymap.imap import IMAPService
 
 from . import utils
 from .auth import IMAPAuthenticator, SMTPAuthenticator
@@ -43,7 +44,7 @@ async def imap_context(args: argparse.Namespace) -> argparse.Namespace:
 
 
 class Service:
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace) -> None:
         self.args: argparse.Namespace = args
         self.imap: IMAPService | None = None
         self.login: IMAPAuthenticator | None = None
@@ -51,15 +52,15 @@ class Service:
         self.smtps: Controller | None = None
         self.frontend: Frontend | None = None
         self.backend: DictBackend | None = None
-        self.config: IMAPConfig | None = None
+        self.config: Config | None = None
         self.handler: MemoryHandler | None = None
         self.mailboxes: TestMailboxDict | None = None
         self.filter_set: FilterSet | None = None
         self.ssl_context: ssl.SSLContext | None = None
 
     @property
-    def demo_user(self):
-        return self.config.demo_user
+    def demo_user(self) -> str | None:
+        return self.config.demo_user if self.config else None
 
     def log_connection_info(self) -> None:
         tls = bool(self.args.cert and self.args.key)
@@ -156,7 +157,7 @@ class Service:
         return service
 
     @asynccontextmanager
-    async def start(self) -> AsyncGenerator:
+    async def start(self) -> AsyncGenerator[None, None]:
         loop = asyncio.get_event_loop()
         if self.frontend:
             loop.create_task(self.frontend.start())

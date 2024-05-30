@@ -15,7 +15,7 @@ def ensure_bytes(x: bytes | str) -> bytes:
 
 
 class IMAPAuthenticator(Login):
-    def __init__(self, config: Config, multi_user: bool = False):
+    def __init__(self, config: Config, multi_user: bool = False) -> None:
         super().__init__(config)
         self.multi_user = multi_user
 
@@ -34,7 +34,7 @@ class IMAPAuthenticator(Login):
 
 
 class SMTPAuthenticator:
-    def __init__(self, user: str, password: str, multi_user: bool = False):
+    def __init__(self, user: str, password: str, multi_user: bool = False) -> None:
         self.user, self.password = map(ensure_bytes, (user, password))
         self.multi_user = multi_user
 

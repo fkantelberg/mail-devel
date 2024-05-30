@@ -12,7 +12,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from importlib import resources
-from typing import Tuple
+from typing import Any, Tuple
 
 import aiohttp
 from aiohttp import web
@@ -28,6 +28,9 @@ from .utils import VERSION
 _logger = logging.getLogger(__name__)
 
 
+Mail = dict[str, Any]
+
+
 def decode_header(value: str) -> str:
     return str(header.make_header(header.decode_header(value)))
 
@@ -37,7 +40,7 @@ def flags_to_api(flags: frozenset[Flag]) -> list[str]:
 
 
 async def run_app(
-    api,
+    api: web.Application,
     host: str | None = None,
     port: int | None = None,
     ssl_context: ssl.SSLContext | None = None,
@@ -72,7 +75,7 @@ class Frontend:
         ensure_message_id: bool = True,
         client_max_size: int = 1 << 20,
         multi_user: bool = False,
-    ):
+    ) -> None:
         self.mailboxes: TestMailboxDict = mailboxes
         self.api: web.Application | None = None
         self.host: str = host
@@ -189,7 +192,7 @@ class Frontend:
         mailbox: str,
         full: bool = False,
         message: Message | None = None,
-    ) -> dict:
+    ) -> Mail:
         if not message:
             content = await self._message_content(msg)
             message = message_from_bytes(content)
@@ -282,13 +285,12 @@ class Frontend:
         except (IndexError, KeyError):  # pragma: no cover
             return
 
-        result = []
-        async for msg in mbox.messages():
-            result.append(
-                await self._convert_message(msg, account=account, mailbox=mailbox)
-            )
+        result = [
+            await self._convert_message(msg, account=account, mailbox=mailbox)
+            async for msg in mbox.messages()
+        ]
 
-        result.sort(key=lambda x: x["date"], reverse=True)
+        result.sort(key=lambda x: x["date"], reverse=True)  # type: ignore
 
         await ws.send_json(
             {
@@ -424,7 +426,7 @@ class Frontend:
         ws: WebSocketResponse,
         account: str | None,
         mailbox: str | None,
-        mails: list[dict],
+        mails: list[Mail],
     ) -> None:
         compat_strict = policy.compat32.clone(raise_on_defect=True)
         counter = 0
@@ -453,7 +455,7 @@ class Frontend:
         ws: WebSocketResponse,
         account: str | None,
         mailbox: str | None,
-        mail: dict,
+        mail: Mail,
     ) -> None:
         header, body = map(mail.get, ("header", "body"))
         if not isinstance(header, dict) or not isinstance(body, str):

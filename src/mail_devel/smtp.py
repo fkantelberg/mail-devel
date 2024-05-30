@@ -2,11 +2,14 @@ import importlib
 import importlib.util
 import logging
 import os
+import re
 from email.message import Message
+from logging import Logger
 from types import ModuleType
 from typing import Callable, Iterable, Type
 
 from aiosmtpd.handlers import AsyncMessage
+from aiosmtpd.smtp import Envelope, Session
 from pymap.parsing.specials.flag import Flag
 
 from .builder import Builder
@@ -15,13 +18,20 @@ from .mailbox import TestMailboxDict
 _logger = logging.getLogger(__name__)
 _reply_logger = logging.getLogger(f"{__name__}.reply")
 
-Flags = frozenset[Flag]
-
 
 class Reply:
-    def __init__(self, message: Message, flags: set[str] | None = None):
+    def __init__(self, message: Message, flags: set[str] | None = None) -> None:
         self.message = message
         self.flags = set(flags or [])
+
+
+def dummy(_message: Message, _flags: set[str], _logger: logging.Logger) -> Reply | None:
+    """No auto respond mail"""
+    return None
+
+
+__all__ = ["Flag", "Logger", "Message", "Reply"]
+Responder = Callable[[Message, set[str], logging.Logger], Reply]
 
 
 class MemoryHandler(AsyncMessage):
@@ -33,22 +43,22 @@ class MemoryHandler(AsyncMessage):
         message_class: Type[Message] | None = None,
         multi_user: bool = False,
         responder: str | None = None,
-    ):
+    ) -> None:
         super().__init__(message_class)
         self.mailboxes: TestMailboxDict = mailboxes
         self.flagged_seen: bool = flagged_seen
         self.ensure_message_id = ensure_message_id
         self.multi_user: bool = multi_user
 
-        self.responder: Callable | None = None
+        self.responder: Responder | None = None
         self.load_responder(responder)
 
     def _default_flags(self) -> set[str]:
         return {"Seen"} if self.flagged_seen else set()
 
     def _convert_flags(
-        self, flags: Flags | Iterable[bytes | str | Flag] | None
-    ) -> Flags:
+        self, flags: Iterable[bytes | str | Flag] | None
+    ) -> frozenset[Flag]:
         result = []
         for flag in flags or []:
             if isinstance(flag, str):
@@ -59,7 +69,11 @@ class MemoryHandler(AsyncMessage):
                 result.append(flag)
         return frozenset(result)
 
-    def _load_responder_from_file(self, responder: str) -> ModuleType | None:
+    def _load_responder_from_script(self, script: ModuleType) -> Responder | None:
+        responder = getattr(script, "reply", None)
+        return responder if callable(responder) else None
+
+    def _load_responder_from_file(self, responder: str) -> Responder | None:
         if not os.path.isfile(responder):
             return None
 
@@ -73,7 +87,29 @@ class MemoryHandler(AsyncMessage):
                 return None
 
             spec.loader.exec_module(script)
-            return script
+
+            reply = self._load_responder_from_script(script)
+            if not reply:
+                return None
+
+            _logger.info(f"Loaded auto responder {responder}")
+            return reply
+        except ImportError:
+            return None
+
+    def _load_responder_from_module(self, responder: str) -> Responder | None:
+        if not re.match(r"^[0-9a-zA-Z_]+$", responder):
+            return None
+
+        try:
+            script = importlib.import_module(f".automation.{responder}", __package__)
+            _logger.info(f"Loaded auto responder .automation.{responder}")
+            reply = self._load_responder_from_script(script)
+            if not reply:
+                return None
+
+            _logger.info(f"Loaded auto responder {responder}")
+            return reply
         except ImportError:
             return None
 
@@ -81,30 +117,24 @@ class MemoryHandler(AsyncMessage):
         if not responder:
             return
 
-        try:
-            script = importlib.import_module(f".automation.{responder}", __package__)
-            _logger.info(f"Loaded auto responder .automation.{responder}")
-        except ImportError:
-            script = None
-
-        if not script:
-            script = self._load_responder_from_file(responder)
-            if script:
-                _logger.info(f"Loaded auto responder {responder}")
-
-        if script:
-            reply = getattr(script, "reply", None)
-            if callable(reply):
+        for func in [
+            self._load_responder_from_module,
+            self._load_responder_from_file,
+        ]:
+            reply = func(responder)
+            if reply:
                 self.responder = reply
+                break
 
     async def auto_respond(self, message: Message) -> None:
-        if not callable(self.responder):
+        """Auto responder when a new message arrives via smtp"""
+        if not self.responder or not callable(self.responder):
             return
 
         reply = self.responder(
-            message=message,
-            flags=self._default_flags(),
-            _logger=_reply_logger,
+            message,
+            self._default_flags(),
+            _reply_logger,
         )
         if isinstance(reply, Reply) and reply.message:
             await self.mailboxes.append(
@@ -112,7 +142,7 @@ class MemoryHandler(AsyncMessage):
                 flags=self._convert_flags(reply.flags),
             )
 
-    def prepare_message(self, session, envelope):
+    def prepare_message(self, session: Session, envelope: Envelope) -> Message:
         if envelope.smtp_utf8 and isinstance(envelope.content, (bytes, bytearray)):
             data = envelope.content
             try:
@@ -121,7 +151,7 @@ class MemoryHandler(AsyncMessage):
                 pass
         return super().prepare_message(session, envelope)
 
-    async def handle_message(self, message: Message) -> None:  # type: ignore
+    async def handle_message(self, message: Message) -> None:
         _logger.info(f"Got message {message['From']} -> {message['To']}")
         if not message["Message-Id"] and self.ensure_message_id:
             message.add_header("Message-Id", Builder.message_id())

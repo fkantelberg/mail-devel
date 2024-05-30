@@ -3,7 +3,9 @@ from datetime import datetime
 from email.message import Message
 from email.utils import getaddresses
 
-from pymap.backend.dict import Config, FilterSet, MailboxData, MailboxSet
+from pymap.backend.dict import Config
+from pymap.backend.dict.filter import FilterSet
+from pymap.backend.dict.mailbox import MailboxData, MailboxSet
 from pymap.parsing.message import AppendMessage
 from pymap.parsing.specials.flag import Flag
 
@@ -22,7 +24,9 @@ class TestMailboxSet(MailboxSet):
 class TestMailboxDict:
     """Class to handle all mailbox accounts"""
 
-    def __init__(self, config: Config, filter_set: FilterSet, multi_user: bool = False):
+    def __init__(
+        self, config: Config, filter_set: FilterSet, multi_user: bool = False
+    ) -> None:
         self.config: Config = config
         self.filter_set: FilterSet = filter_set
         self.multi_user: bool = multi_user
@@ -40,7 +44,7 @@ class TestMailboxDict:
             stats[user] = len([msg async for msg in mbox.messages()])
         return stats
 
-    async def list(self):
+    async def list(self) -> list[str]:
         """List the available mailbox accounts"""
         if not self.config.set_cache:
             await self.get(self.config.demo_user)

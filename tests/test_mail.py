@@ -6,6 +6,7 @@ from random import randint
 from secrets import token_hex
 from smtplib import SMTP, SMTPAuthenticationError
 from threading import Thread
+from typing import Any, AsyncGenerator, Callable, Iterable, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -45,29 +46,39 @@ aGVsbG8gd29ybGQ=
 
 
 class ThreadResult(Thread):
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None):
+    def __init__(
+        self,
+        group: None = None,
+        target: Callable[[int, str, str, int | None], bool] | None = None,
+        name: str | None = None,
+        args: Iterable[Any] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> None:
         if not kwargs:
             kwargs = {}
 
+        self._args = args
+        self._kwargs = kwargs
+        self._target = target
         super().__init__(group, target, name, args, kwargs)
-        self._return = None
+        self._return: Any = None
 
-    def run(self):
+    def run(self) -> None:
         if self._target is not None:
             self._return = self._target(*self._args, **self._kwargs)
 
-    def join(self, *args):
+    def join(self, *args: Any) -> Any:
         super().join(*args)
         return self._return
 
 
-def unused_ports(n: int = 1):
+def unused_ports(n: int = 1) -> list[int]:
     if n == 1:
-        return randint(4000, 14000)
+        return [randint(4000, 14000)]
     return [randint(4000, 14000) for _ in range(n)]
 
 
-async def build_test_service(pw, **kwargs):
+async def build_test_service(pw: str, **kwargs: Any) -> Service:
     args = ["--host", "127.0.0.1", "--user", "test", "--password", pw]
     for key, value in kwargs.items():
         key = key.replace("_", "-")
@@ -75,11 +86,13 @@ async def build_test_service(pw, **kwargs):
             args.extend((f"--{key}", str(value)))
         else:
             args.append(f"--{key}")
-    args = Service.parse(args)
-    return await Service.init(args)
+    namespace = Service.parse(args)
+    return await Service.init(namespace)
 
 
-def imap_login_test(port, user, password, mail_count=None):
+def imap_login_test(
+    port: int, user: str, password: str, mail_count: int | None = None
+) -> bool:
     try:
         with IMAP4("localhost", port=port) as mbox:
             mbox.login(user, password)
@@ -96,16 +109,19 @@ def imap_login_test(port, user, password, mail_count=None):
 
 
 @asynccontextmanager
-async def prepare_http_test():
+async def prepare_http_test() -> AsyncGenerator[Tuple[ClientSession, Service], None]:
     imap_port, smtp_port, http_port = unused_ports(3)
     pw = token_hex(10)
     service = await build_test_service(
         pw, imap_port=imap_port, smtp_port=smtp_port, http_port=http_port
     )
+    assert service.mailboxes
+    assert service.demo_user
     account = await service.mailboxes.get(service.demo_user)
     mailbox = await account.get_mailbox("INBOX")
     await account.get_mailbox("SENT")
 
+    assert service.frontend
     assert service.frontend.load_resource("index.html")
     assert service.frontend.load_resource("main.css")
     assert service.frontend.load_resource("main.js")
@@ -123,16 +139,18 @@ async def prepare_http_test():
 
 
 @pytest.mark.asyncio
-async def test_no_password():
+async def test_no_password() -> None:
     with pytest.raises(argparse.ArgumentError):
         Service.parse([])
 
 
 @pytest.mark.asyncio
-async def test_service():
-    smtp_port = unused_ports()
+async def test_service() -> None:
+    (smtp_port,) = unused_ports()
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=smtp_port, no_http=None)
+    assert service.mailboxes
+
     account = await service.mailboxes.get("main")
     mailbox = await account.get_mailbox("INBOX")
     sent = await account.get_mailbox("SENT")
@@ -150,7 +168,7 @@ async def test_service():
 
 
 @pytest.mark.asyncio
-async def test_http_static():
+async def test_http_static() -> None:
     async with prepare_http_test() as (session, _service):
         for route in ["/", "/main.css", "/main.js"]:
             async with session.get(route) as response:
@@ -161,7 +179,7 @@ async def test_http_static():
 
 
 @pytest.mark.asyncio
-async def test_websocket():
+async def test_websocket() -> None:
     async with prepare_http_test() as (session, _service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_str("invalid json")
@@ -176,7 +194,7 @@ async def test_websocket():
 
 
 @pytest.mark.asyncio
-async def test_http_upload():
+async def test_http_upload() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             mail_no_id = "\n".join(
@@ -197,7 +215,7 @@ async def test_http_upload():
 
 
 @pytest.mark.asyncio
-async def test_http():
+async def test_http() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_json({"command": "list_accounts"})
@@ -253,7 +271,7 @@ async def test_http():
 
 
 @pytest.mark.asyncio
-async def test_http_random():
+async def test_http_random() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_json(
@@ -270,7 +288,7 @@ async def test_http_random():
 
 
 @pytest.mark.asyncio
-async def test_http_reply():
+async def test_http_reply() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_json(
@@ -334,7 +352,7 @@ async def test_http_reply():
 
 
 @pytest.mark.asyncio
-async def test_http_flagging():
+async def test_http_flagging() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_json(
@@ -410,7 +428,7 @@ async def test_http_flagging():
 
 
 @pytest.mark.asyncio
-async def test_http_attachment():
+async def test_http_attachment() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:
             await ws.send_json(
@@ -441,15 +459,18 @@ async def test_http_attachment():
 
 
 @pytest.mark.asyncio
-async def test_smtp_auth():
-    port = unused_ports()
+async def test_smtp_auth() -> None:
+    (port,) = unused_ports()
     pw = token_hex(10)
     service = await build_test_service(pw, smtp_port=port, no_http=None)
+    assert service.mailboxes
+
     account = await service.mailboxes.get("test")
     mailbox = await account.get_mailbox("INBOX")
 
     await asyncio.sleep(0.2)
     async with service.start():
+        assert service.handler
         await asyncio.sleep(0.1)
 
         with SMTP("localhost", port=port) as smtp:
@@ -484,7 +505,7 @@ async def test_smtp_auth():
 
 
 @pytest.mark.asyncio
-async def test_smtp_auth_multi_user():
+async def test_smtp_auth_multi_user() -> None:
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -505,7 +526,7 @@ async def test_smtp_auth_multi_user():
 
 
 @pytest.mark.asyncio
-async def test_imap_auth():
+async def test_imap_auth() -> None:
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -526,7 +547,7 @@ async def test_imap_auth():
 
 
 @pytest.mark.asyncio
-async def test_imap_auth_multi_user():
+async def test_imap_auth_multi_user() -> None:
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -550,7 +571,7 @@ async def test_imap_auth_multi_user():
 
 
 @pytest.mark.asyncio
-async def test_imap_auth_multi_user_mails():
+async def test_imap_auth_multi_user_mails() -> None:
     iport, sport = unused_ports(2)
     pw = token_hex(10)
     service = await build_test_service(
@@ -589,7 +610,7 @@ async def test_imap_auth_multi_user_mails():
 
 
 @pytest.mark.asyncio
-async def test_main_sleep_forever():
+async def test_main_sleep_forever() -> None:
     with patch("asyncio.sleep", autospec=True) as mock:
         mock.side_effect = [None] * 10 + [GeneratorExit()]
         with pytest.raises(GeneratorExit):
@@ -598,7 +619,7 @@ async def test_main_sleep_forever():
 
 
 @pytest.mark.asyncio
-async def test_main():
+async def test_main() -> None:
     pw = token_hex(10)
     sport, iport = unused_ports(2)
 

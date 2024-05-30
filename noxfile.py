@@ -2,13 +2,13 @@ import nox
 
 
 @nox.session()
-def clean(session):
+def clean(session: nox.Session) -> None:
     session.install("coverage")
     session.run("coverage", "erase")
 
 
 @nox.session()
-def py3(session):
+def py3(session: nox.Session) -> None:
     session.install(
         "-e",
         ".",
@@ -30,7 +30,7 @@ def py3(session):
 
 
 @nox.session()
-def report(session):
+def report(session: nox.Session) -> None:
     session.install("coverage")
     session.run("coverage", "html")
     session.run("coverage", "report", "--fail-under=80")
