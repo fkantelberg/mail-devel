@@ -266,10 +266,78 @@ class Frontend:
                 "command": "list_mailboxes",
                 "data": {
                     "account": account,
-                    "mailboxes": [m.name for m in mailboxes.list()],
+                    "mailboxes": sorted(m.name for m in mailboxes.list()),
                 },
             }
         )
+
+    async def on_add_mailbox(
+        self,
+        ws: WebSocketResponse,
+        account: str,
+        name: str,
+        parent: str | bool = False,
+    ) -> None:
+        if not account or not name:
+            return
+
+        try:
+            acc = self.mailboxes[account]
+            await acc.add_mailbox(f"{parent}/{name}" if parent else name)
+        except (IndexError, KeyError, ValueError):  # pragma: no cover
+            return
+
+        await self.on_list_mailboxes(ws, account)
+
+    async def on_delete_mailbox(
+        self,
+        ws: WebSocketResponse,
+        account: str,
+        name: str,
+    ) -> None:
+        if not account or not name:
+            return
+
+        if name == "INBOX":
+            return
+
+        try:
+            acc = self.mailboxes[account]
+
+            mailboxes = await acc.list_mailboxes()
+            to_delete = [m.name for m in mailboxes.list() if m.name.startswith(name)]
+            for mbox_name in sorted(to_delete, reverse=True):
+                await acc.delete_mailbox(mbox_name)
+        except (IndexError, KeyError):  # pragma: no cover
+            return
+
+        await self.on_list_mailboxes(ws, account)
+
+    async def on_move_mail(
+        self,
+        ws: WebSocketResponse,
+        account: str,
+        mailbox_from: str,
+        mailbox_to: str,
+        mail_uid: int,
+    ) -> None:
+        if not account:
+            return
+
+        if not mailbox_from or not mailbox_to or mailbox_from == mailbox_to:
+            return
+
+        try:
+            acc = self.mailboxes[account]
+
+            mbox_from = await acc.get_mailbox(mailbox_from)
+            mbox_to = await acc.get_mailbox(mailbox_to)
+        except (IndexError, KeyError):  # pragma: no cover
+            return
+
+        await mbox_from.move(mail_uid, mbox_to)
+
+        await self.on_list_mails(ws, account, mailbox_from)
 
     async def on_list_mails(
         self, ws: WebSocketResponse, account: str | None, mailbox: str | None

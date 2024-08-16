@@ -3,7 +3,7 @@ import os
 import ssl
 import sys
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"

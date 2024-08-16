@@ -428,6 +428,61 @@ async def test_http_flagging() -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_mailboxes() -> None:
+    async with prepare_http_test() as (session, service):
+        async with session.ws_connect("/websocket") as ws:
+            frontend = service.frontend
+            assert frontend
+
+            await ws.send_json(
+                {
+                    "command": "list_mailboxes",
+                    "account": service.demo_user,
+                }
+            )
+            data = await ws.receive_json()
+            assert data["command"] == "list_mailboxes"
+            mailboxes = data["data"]["mailboxes"]
+
+            await ws.send_json(
+                {
+                    "command": "add_mailbox",
+                    "account": service.demo_user,
+                    "name": "test",
+                }
+            )
+
+            data = await ws.receive_json()
+            assert data["command"] == "list_mailboxes"
+            assert set(data["data"]["mailboxes"]) == {*mailboxes, "test"}
+
+            await ws.send_json(
+                {
+                    "command": "add_mailbox",
+                    "account": service.demo_user,
+                    "name": "test",
+                    "parent": "test",
+                }
+            )
+
+            data = await ws.receive_json()
+            assert data["command"] == "list_mailboxes"
+            assert set(data["data"]["mailboxes"]) == {*mailboxes, "test", "test/test"}
+
+            await ws.send_json(
+                {
+                    "command": "delete_mailbox",
+                    "account": service.demo_user,
+                    "name": "test",
+                }
+            )
+
+            data = await ws.receive_json()
+            assert data["command"] == "list_mailboxes"
+            assert set(data["data"]["mailboxes"]) == set(mailboxes)
+
+
+@pytest.mark.asyncio
 async def test_http_attachment() -> None:
     async with prepare_http_test() as (session, service):
         async with session.ws_connect("/websocket") as ws:

@@ -37,7 +37,7 @@ class MailClient {
   constructor() {
     this.accounts = document.getElementById("accounts");
     this.connection = document.querySelector("#connection input[type=checkbox]");
-    this.mailboxes = document.getElementById("mailboxes");
+    this.mailboxes = document.querySelector("#nav #mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
     this.wrapper = document.querySelector("#wrapper");
     this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
@@ -97,9 +97,9 @@ class MailClient {
     vis("#btn-html", this.content_mode !== "html");
     vis("#btn-plain", this.content_mode !== "plain");
     vis("#btn-source", this.content_mode !== "source");
-    vis("#content iframe#html", this.content_mode === "html");
-    vis("#content textarea#plain", this.content_mode === "plain");
-    vis("#content textarea#source", this.content_mode === "source");
+    vis("#mail-content iframe#html", this.content_mode === "html");
+    vis("#mail-content textarea#plain", this.content_mode === "plain");
+    vis("#mail-content textarea#source", this.content_mode === "source");
     vis("#editor .header .extra", this.editor_mode === "advanced");
     vis("#editor #btn-add-header", this.editor_mode === "advanced");
 
@@ -234,10 +234,11 @@ class MailClient {
       return;
 
     for (const opt of this.accounts.options) {
-      if (accounts.indexOf(opt.value) < 0)
+      const idx = accounts.indexOf(opt.value);
+      if (idx < 0)
         opt.remove();
       else
-        delete accounts[opt.value];
+        accounts.splice(idx, 1);
     }
 
     for (const account of accounts)
@@ -277,18 +278,37 @@ class MailClient {
 
     this.account_name = account_name;
 
+    const tmp = [];
     for (const opt of this.mailboxes.options) {
-      if (data.mailboxes.indexOf(opt.uid) < 0)
-        opt.remove()
-      else
-        data.splice(idx, 1);
+      const idx = data.mailboxes.indexOf(opt.value);
+      if (idx >= 0) {
+        tmp.push(opt);
+        data.mailboxes.splice(idx, 1);
+      }
     }
 
     for (const mailbox of data.mailboxes) {
-      this.mailboxes.add(
-        new Option(mailbox, mailbox, true, this.mailbox_name === mailbox)
-      );
+      const opt = new Option(mailbox, mailbox, true, this.mailbox_name === mailbox);
+      tmp.push(opt);
+
+      opt.addEventListener("dragover", (ev) => {ev.preventDefault();});
+      opt.addEventListener("drop", self.ondrop_mailbox.bind(self));
     }
+
+    // Sort
+    tmp.sort((a, b) => {
+      if (a.value === "INBOX")
+        return -1
+      else if (b.value === "INBOX")
+        return 1;
+      return a.value.localeCompare(b.value);
+    });
+
+    while (this.mailboxes.options.length)
+      this.mailboxes.options.remove(0);
+
+    for (const opt of tmp)
+      this.mailboxes.options.add(opt);
 
     if (this.mailboxes.selectedIndex < 0) {
       this.mailboxes.selectedIndex = 0;
@@ -349,16 +369,18 @@ class MailClient {
       const row = await self._mail_row_init(template, msg);
 
       row.uid = msg.uid;
+      row.addEventListener("dragstart", this.ondrag_mail.bind(this));
       await self._mail_row_fill(row, msg);
       lines.push(row);
     }
 
-    for (const line of lines) {
+    for (const line of this.mailbox.children) {
       if (uids.indexOf(line.uid) < 0 && line !== template)
         line.remove();
     }
 
     if (this.sort_asc) lines.reverse();
+
     for (const line of lines)
       this.mailbox.append(line);
   }
@@ -417,7 +439,7 @@ class MailClient {
     }
 
     const attachments = [];
-    for (const file of document.querySelector("#editor-attachments input").files) {
+    for (const file of document.querySelector("#editor .attachments input").files) {
       attachments.push({
         size: file.size,
         mimetype: file.type,
@@ -432,7 +454,7 @@ class MailClient {
       mailbox: this.mailbox_name,
       mail: {
         header: headers,
-        body: document.querySelector("#editor-content textarea").value,
+        body: document.querySelector("#editor .content textarea").value,
         attachments: attachments,
       },
     });
@@ -577,13 +599,13 @@ class MailClient {
     document.querySelector("#header-cc input").value = data?.header?.cc || "";
     document.querySelector("#header-bcc input").value = data?.header?.bcc || "";
     document.querySelector("#header-subject input").value = data?.header?.subject || "";
-    document.querySelector("#content textarea#source").value = data?.content || "";
-    document.querySelector("#content textarea#plain").value = data?.body_plain || "";
-    document.querySelector("#content iframe#html").srcdoc = data?.body_html || "";
+    document.querySelector("#mail-content textarea#source").value = data?.content || "";
+    document.querySelector("#mail-content textarea#plain").value = data?.body_plain || "";
+    document.querySelector("#mail-content iframe#html").srcdoc = data?.body_html || "";
   }
 
   async add_header(key = null, value = null) {
-    const table = document.getElementById("editor-header");
+    const table = document.querySelector("#editor .header");
     const row = element("tr", {"class": "extra"});
     const key_td = element("th"), value_td = element("td"), btn_td = element("td");
     const btn = element("button", {"type": "button", "class": "delete"});
@@ -643,8 +665,8 @@ class MailClient {
       element.value = (header && header[key]) ? header[key] : "";
     }
 
-    document.querySelector("#editor-content textarea").value = body || "";
-    document.querySelector("#editor-attachments input").value = "";
+    document.querySelector("#editor .content textarea").value = body || "";
+    document.querySelector("#editor .attachments input").value = "";
   }
 
   async initialize() {
@@ -676,6 +698,7 @@ class MailClient {
     document.getElementById("btn-new").addEventListener("click", (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.remove("hidden");
+      document.querySelector("#mailbox-control").classList.add("hidden");
     });
 
     document.getElementById("btn-random").addEventListener("click", (ev) => {
@@ -683,7 +706,7 @@ class MailClient {
       self.load_random_mail();
     });
 
-    document.getElementById("btn-cancel").addEventListener("click", (ev) => {
+    document.querySelector("#editor #btn-cancel").addEventListener("click", (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.add("hidden");
       self.reset_editor();
@@ -758,8 +781,77 @@ class MailClient {
       self.ondrag(ev);
     });
 
+    document.querySelector("#btn-mailbox-manage").addEventListener(
+      "click", () => {
+        document.querySelector("#editor").classList.add("hidden");
+        self.visibility_mailbox_control();
+      }
+    );
+
+    document.querySelector("#mailbox-control #btn-cancel").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.visibility_mailbox_control(true);
+    });
+
+    document.querySelector("#btn-add-folder").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.add_mailbox(false);
+    });
+    document.querySelector("#btn-add-sub-folder").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.add_mailbox(true);
+    });
+    document.querySelector("#btn-del-folder").addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.delete_mailbox();
+    });
+
     await this.visibility();
     await this.idle();
+  }
+
+  async visibility_mailbox_control(force_close=false) {
+    const control = document.querySelector("#mailbox-control");
+    if (force_close)
+      control.classList.add("hidden")
+    else
+      control.classList.toggle("hidden");
+
+    const icon = document.querySelector("#btn-mailbox-manage .icon");
+    if (control.classList.contains("hidden"))
+      icon.classList.remove("open");
+    else
+      icon.classList.add("open");
+
+    this.reset_mailbox_control();
+  }
+
+  async add_mailbox(subfolder=false) {
+    const input = document.querySelector("#mailbox-name");
+    if (input.value)
+      await this.socket_send(
+        {
+          command: "add_mailbox",
+          account: this.account_name,
+          parent: subfolder ? this.mailbox_name : false,
+          name: input.value,
+        }
+      );
+  }
+
+  async delete_mailbox() {
+    await this.socket_send(
+      {
+        command: "delete_mailbox",
+        account: this.account_name,
+        name: this.mailbox_name,
+      }
+    );
+  }
+
+  async reset_mailbox_control() {
+    const input = document.querySelector("#mailbox-name");
+    input.value = "";
   }
 
   reset_drag() {
@@ -777,11 +869,15 @@ class MailClient {
         "auto",
       ];
       this.wrapper.style.gridTemplateColumns = sizes.join(" ");
+
+      const control = document.querySelector("#mailbox-control");
+      control.style.left = pos + "px";
+      control.style.top = this.mailboxes.offsetTop + "px";
     }
 
     if (mailbox) {
       const dragbar = document.querySelector("#mailbox-dragbar");
-      const header = document.querySelector("#header");
+      const header = document.querySelector("#mail-header");
       const max_height = this.wrapper.clientHeight - header.clientHeight - dragbar.clientHeight;
       const pos = clamp(mailbox, 50, max_height);
       const sizes = [
@@ -798,12 +894,32 @@ class MailClient {
   ondrag(ev) {
     if (this.drag.nav) {
       localStorage.setItem("drag-nav", event.clientX);
-      this.apply_drag(nav=event.clientX, null);
+      this.apply_drag(event.clientX, null);
     }
 
     if (this.drag.mailbox) {
       localStorage.setItem("drag-mailbox", event.clientY);
-      this.apply_drag(null, mailbox=event.clientY);
+      this.apply_drag(null, event.clientY);
     }
+  }
+
+  async ondrag_mail(ev) {
+    ev.dataTransfer.setData("text", ev.target.uid);
+  }
+
+  async ondrop_mailbox(ev) {
+    ev.preventDefault();
+    const mail_uid = ev.dataTransfer.getData("text");
+    const mailbox_name = ev.target.value;
+    if (mail_uid && mailbox_name)
+      await this.socket_send(
+        {
+            command: "move_mail",
+            account: this.account_name,
+            mailbox_from: this.mailbox_name,
+            mailbox_to: mailbox_name,
+            mail_uid: parseInt(mail_uid),
+        }
+      );
   }
 }

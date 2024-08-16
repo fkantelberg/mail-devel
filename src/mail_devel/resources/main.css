@@ -60,7 +60,7 @@ html, body {
   margin: 0;
 }
 
-body, input, select, textarea, table, #editor {
+body, input, select, textarea, table, .popup {
   background-color: var(--back);
   color: var(--primary);
 }
@@ -102,7 +102,7 @@ button, .btn {
   white-space: nowrap;
 }
 
-#content {grid-area: content}
+#mail-content {grid-area: content}
 #mailbox {grid-area: mailbox}
 #nav {
   display: flex;
@@ -110,7 +110,7 @@ button, .btn {
   grid-area: nav;
   padding: 0 15px;
 }
-#header {
+#mail-header {
   grid-area: header;
   background-color: var(--highlight);
   border: 2px solid var(--border);
@@ -136,6 +136,7 @@ button, .btn {
   display: block;
   flex: 1;
   font-size: var(--font-big);
+  margin-bottom: 0;
   height: 80%;
   overflow-y: auto;
   width: 100%;
@@ -240,7 +241,7 @@ button, .btn {
   display: none;
 }
 
-#btn-new, #uploader, #btn-random {
+.btn-main {
   font-size: var(--font-big);
   padding: 5pt 2pt;
   margin: 2px 0;
@@ -267,54 +268,84 @@ button, .btn {
 #btn-dropdown:hover div {display: block}
 #btn-dropdown a:hover {background: var(--highlight)}
 
-#editor {
+.popup {
   background-color: var(--highlight);
-  display: grid;
   z-index: 1000;
-  position: fixed;
   border-radius: 10px;
   padding: 10px;
   border: 2px solid var(--border);
+}
+
+.popup.centered {
+  position: fixed;
   top: 150px;
   left: 150px;
   bottom: 150px;
   right: 150px;
+}
+
+#mailbox-control {
+  background-color: var(--back);
+  border-color: var(--primary);
+  border-radius: 0 10px 10px 0;
+  border-width: 3px 3px 3px 0px;
+  position: fixed;
+  width: 250px;
+}
+#btn-mailbox-manage .icon {
+  float: right;
+}
+#btn-mailbox-manage .open.icon:before {content: "<"}
+#btn-mailbox-manage .icon:before {content: ">"}
+
+#editor {
+  display: grid;
   grid-template-rows: max-content max-content min-content auto;
 }
 
-#editor-content {
+#editor .content {
   display: block;
   height: 100%;
 }
-#editor-attachments {
+#editor .attachments {
   border-top: 0;
   border-bottom: 2px solid var(--border);
 }
-#editor-header {
+#editor .header {
   display: block;
   max-height: 200px;
   overflow-y: scroll;
   padding: 3px;
   border-bottom: 0;
 }
-#editor-header th, #editor-attachments th {
+#editor .header th {
   position: relative;
   min-width: 150px;
   max-width: 150px;
 }
-#editor-buttons button {
+#editor .buttons button {
   padding: 5pt 2pt;
   width: 125px;
 }
-#editor-header .delete {
+#mailbox-control .buttons button {
+  font-size: var(--font-big);
+  margin: 2px 0;
+  padding: 5pt 2pt;
+  width: 100%;
+}
+#mailbox-control #mailbox-name {
+  padding: 5px 0;
+  width: 100%;
+}
+#editor .header .delete {
   content: "&#128465;";
 }
-#editor-buttons {
+#editor .buttons {
   text-align: right;
   padding: 3px;
 }
-#editor-header td {width: 100%}
-#editor-header .control {
+#editor .header td {width: 100%}
+#editor .header .control {
   min-width: 20px;
 }
 

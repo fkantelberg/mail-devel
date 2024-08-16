@@ -35,16 +35,20 @@
         </div>
       </div>
 
-      <select id="accounts" name="accounts" class="hidden"></select>
+      <select id="accounts" class="hidden"></select>
 
-      <button id="btn-new" type="button">Send Mail</button>
-      <label id="uploader" class="btn">
+      <button id="btn-new" type="button" class="btn-main">Send Mail</button>
+      <label id="uploader" class="btn btn-main">
         <div>Upload Mail</div>
         <input type="file" multiple="multiple"/>
       </label>
-      <button id="btn-random" type="button">Randomize Mail</button>
+      <button id="btn-random" type="button" class="btn-main">Randomize Mail</button>
+      <button id="btn-mailbox-manage" type="button" class="btn-main">
+        Manage Mailbox
+        <span class="icon" />
+      </button>
 
-      <select id="mailboxes" name="mailboxes" multiple="multiple">
+      <select id="mailboxes" multiple="multiple">
       </select>
     </div>
 
@@ -61,7 +65,7 @@
         </thead>
         <tbody></tbody>
         <tfoot>
-          <tr id="mail-row-template" class="hidden">
+          <tr id="mail-row-template" class="hidden" draggable="true">
             <td class="summary">
               <div class="subject no-overflow"></div>
               <table class="additional">
@@ -93,7 +97,7 @@
 
     <div id="mailbox-dragbar"></div>
 
-    <table id="header" class="header">
+    <table id="mail-header" class="header">
       <tr id="header-from">
         <th>From:</th>
         <td><input type="text" readonly="readonly"/></td>
@@ -128,15 +132,15 @@
       </tr>
     </table>
 
-    <div id="content" class="container">
+    <div id="mail-content" class="container">
       <iframe id="html"></iframe>
       <textarea id="plain" readonly="readonly"></textarea>
       <textarea id="source" readonly="readonly"></textarea>
     </div>
   </div>
 
-  <div id="editor" class="hidden">
-    <div id="editor-buttons" class="buttons">
+  <div id="editor" class="hidden popup centered">
+    <div class="buttons">
       <button id="btn-send">Send</button>
       <button id="btn-add-header">Add Header</button>
       <button id="btn-advanced"></button>
@@ -170,15 +174,26 @@
         <td class="control"></td>
       </tr>
     </table>
-    <table id="editor-attachments" class="header">
+    <table class="header attachments">
       <tr>
         <th>Attachments:</th>
         <td><input type="file" multiple="multiple"/></td>
       </tr>
     </table>
-    <div id="editor-content" class="container">
+    <div class="container content">
       <textarea></textarea>
     </div>
+  </div>
+
+  <div id="mailbox-control" class="popup hidden">
+    <input id="mailbox-name" type="text">
+    <div class="buttons">
+      <button id="btn-add-folder">Add Folder</button>
+      <button id="btn-add-sub-folder">Add Subfolder</button>
+      <button id="btn-del-folder">Remove Selected</button>
+      <button id="btn-cancel">Close</button>
+    </div>
+
   </div>
 
   <script>
