@@ -127,7 +127,7 @@ class MailClient {
       return;
 
     const proto = (window.location.protocol === "https:") ? "wss:" : "ws:";
-    const url = `${proto}//${window.location.host}/websocket`;
+    const url = `${proto}//${window.location.host}${window.location.pathname}websocket`;
     this.socket = new WebSocket(url);
 
     const self = this;
