@@ -35,6 +35,20 @@ def decode_header(value: str) -> str:
     return str(header.make_header(header.decode_header(value)))
 
 
+def decode_payload(part: Message) -> str:
+    payload = part.get_payload(decode=True)
+    if isinstance(payload, bytes):
+        try:
+            return payload.decode()
+        except UnicodeDecodeError:
+            return ""
+
+    if isinstance(payload, str):
+        return payload
+
+    return ""
+
+
 def flags_to_api(flags: frozenset[Flag]) -> list[str]:
     return [f.value.decode().strip("\\").lower() for f in flags]
 
@@ -67,6 +81,7 @@ class Frontend:
     def __init__(
         self,
         mailboxes: TestMailboxDict,
+        *,
         user: str,
         host: str = "",
         port: int = 8080,
@@ -224,13 +239,13 @@ class Frontend:
                         {"name": name, "url": f"/attachment/{msg_hash}/{name}"}
                     )
                 elif ctype == "text/plain":
-                    result["body_plain"] = part.get_payload(decode=True).decode()
+                    result["body_plain"] = decode_payload(part)
                 elif ctype == "text/html":
-                    result["body_html"] = part.get_payload(decode=True).decode()
+                    result["body_html"] = decode_payload(part)
         elif message.get_content_type() == "text/html":
-            result["body_html"] = message.get_payload(decode=True).decode()
+            result["body_html"] = decode_payload(message)
         else:
-            result["body_plain"] = message.get_payload(decode=True).decode()
+            result["body_plain"] = decode_payload(message)
 
         result["attachments"] = attachments
         result["content"] = bytes(content).decode()

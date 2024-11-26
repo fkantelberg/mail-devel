@@ -38,6 +38,7 @@ class MemoryHandler(AsyncMessage):
     def __init__(
         self,
         mailboxes: TestMailboxDict,
+        *,
         flagged_seen: bool = False,
         ensure_message_id: bool = True,
         message_class: Type[Message] | None = None,
