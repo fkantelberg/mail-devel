@@ -31,6 +31,8 @@ def main() -> None:
     args = Service.parse()
 
     utils.configure_logging("DEBUG" if args.debug else "INFO")
+    if args.gen_password:
+        _logger.info(f"Password: {args.password}")
     asyncio.run(run(args))
 
 
