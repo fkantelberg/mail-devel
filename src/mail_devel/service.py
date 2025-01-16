@@ -210,7 +210,7 @@ class Service:
         )
 
         group = parser.add_argument_group("IMAP")
-        parser.add_argument(
+        group.add_argument(
             "--imap-host",
             default=False,
             help="Overrules the IP binding specifically for IMAP",
@@ -224,7 +224,7 @@ class Service:
         )
 
         group = parser.add_argument_group("HTTP")
-        parser.add_argument(
+        group.add_argument(
             "--http-host",
             default=False,
             help="Overrules the IP binding specifically for HTTP",
@@ -260,7 +260,7 @@ class Service:
         )
 
         group = parser.add_argument_group("SMTP")
-        parser.add_argument(
+        group.add_argument(
             "--smtp-host",
             default=False,
             help="Overrules the IP binding specifically for smtp",
