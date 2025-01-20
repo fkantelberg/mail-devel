@@ -2,6 +2,47 @@
 requires = ["setuptools >= 35.0.2", "wheel >= 0.29.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.coverage]
+source = "*/mail_devel/*"
+concurrency = "multiprocessing"
+parallel = true
+
+[tool.isort]
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+line_length = 88
+
+[tool.pylint.IMPORTS]
+ignored-modules = "aiohttp,nox,pysasl,pymap,aiosmtpd,pytest,mail_devel"
+
+[tool.pylint."MESSAGES CONTROL"]
+disable="""
+  bad-inline-option,
+  bad-mcs-classmethod-argument,
+  broad-except,
+  deprecated-pragma,
+  file-ignored,
+  invalid-name,
+  locally-disabled,
+  logging-fstring-interpolation,
+  missing-class-docstring,
+  missing-function-docstring,
+  missing-module-docstring,
+  protected-access,
+  raw-checker-failed,
+  redefined-outer-name,
+  suppressed-message,
+  too-few-public-methods,
+  too-many-arguments,
+  too-many-instance-attributes,
+  too-many-return-statements,
+  too-many-statements,
+  use-symbolic-message-instead,
+  useless-suppression,
+"""
+
 [tool.ruff]
 line-length = 88
 indent-width = 4
@@ -19,3 +60,8 @@ line-ending = "auto"
 
 [tool.mypy]
 strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 5

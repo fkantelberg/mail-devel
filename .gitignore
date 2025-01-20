@@ -1,6 +1,7 @@
 *.egg-info
 *.log
-.coverage
+.coverage*
+!.coveragerc
 .mypy_cache
 .nox/
 .pytest_cache

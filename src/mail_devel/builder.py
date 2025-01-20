@@ -4,6 +4,8 @@ from email.message import Message
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from . import utils
+
 
 class Builder:
     """Helper class to generate mails and randomized values"""
@@ -22,9 +24,9 @@ class Builder:
         if message.is_multipart():
             for part in message.walk():
                 if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True).decode()
+                    body = utils.extract_payload(part, True)
         elif message.get_content_type() == "text/plain":
-            body = message.get_payload(decode=True).decode()
+            body = utils.extract_payload(message, True)
 
         reply = MIMEMultipart()
         if body:

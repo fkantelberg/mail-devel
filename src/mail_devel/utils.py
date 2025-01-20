@@ -2,8 +2,9 @@ import logging
 import os
 import ssl
 import sys
+from email.message import Message
 
-VERSION = "0.14.2"
+VERSION = "0.15.0"
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"
@@ -98,6 +99,15 @@ def convert_size(x: str) -> int:
         if x.endswith(c):
             return int(m * float(x[:-1]))
     return int(float(x))
+
+
+def extract_payload(message: Message, decode: bool) -> str:
+    if decode:
+        content = message.get_payload(decode=True)
+        return content.decode() if isinstance(content, bytes) else ""
+
+    content = message.get_payload(decode=False)
+    return content if isinstance(content, str) else ""
 
 
 def valid_file(path: str, is_directory: bool = False) -> str:

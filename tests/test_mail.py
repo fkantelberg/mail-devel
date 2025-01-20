@@ -46,7 +46,7 @@ aGVsbG8gd29ybGQ=
 
 
 class ThreadResult(Thread):
-    def __init__(
+    def __init__(  # pylint: disable=R0917
         self,
         group: None = None,
         target: Callable[[int, str, str, int | None], bool] | None = None,
@@ -511,6 +511,38 @@ async def test_http_attachment() -> None:
 
             async with session.get("/attachment/invalid/att abc.txt") as response:
                 assert response.status == 404
+
+
+@pytest.mark.asyncio
+async def test_responder() -> None:
+    pw = token_hex(10)
+    service = await build_test_service(pw, no_http=None)
+    assert service.handler
+
+    assert service.handler._load_responder_from_module("invalid-reply") is None
+    assert service.handler._load_responder_from_module("invalid_reply") is None
+
+    assert not service.handler.responder
+    service.handler.load_responder("reply_once")
+    assert service.handler.responder
+
+    service.handler.responder = None
+    service.handler.load_responder("reply_always")
+    assert service.handler.responder
+
+
+@pytest.mark.asyncio
+async def test_memory_handler() -> None:
+    pw = token_hex(10)
+    service = await build_test_service(pw, no_http=None)
+    assert service.handler
+
+    flag = Flag("\\Seen")
+    assert service.handler._convert_flags(None) == frozenset()
+    assert service.handler._convert_flags([]) == frozenset()
+    assert service.handler._convert_flags(["seen"]) == frozenset([flag])
+    assert service.handler._convert_flags([b"seen"]) == frozenset([flag])
+    assert service.handler._convert_flags([flag]) == frozenset([flag])
 
 
 @pytest.mark.asyncio

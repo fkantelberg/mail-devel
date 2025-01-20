@@ -38,7 +38,7 @@ class SMTPAuthenticator:
         self.user, self.password = map(ensure_bytes, (user, password))
         self.multi_user = multi_user
 
-    def __call__(
+    def __call__(  # pylint: disable=R0917
         self,
         server: SMTP,
         session: Session,

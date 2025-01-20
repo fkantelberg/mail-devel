@@ -23,7 +23,7 @@ from pymap.parsing.specials.flag import Flag
 
 from .builder import Builder
 from .mailbox import TestMailboxDict
-from .utils import VERSION
+from .utils import VERSION, extract_payload
 
 _logger = logging.getLogger(__name__)
 
@@ -77,6 +77,7 @@ async def run_app(
     return app
 
 
+# pylint: disable=R0917
 class Frontend:
     def __init__(
         self,
@@ -159,8 +160,8 @@ class Frontend:
                 continue
 
             func = getattr(self, f"on_{command}", None)
-            if callable(func):
-                await func(ws, **data)
+            if func and callable(func):
+                await func(ws, **data)  # pylint: disable=E1102
 
         _logger.info(f"Disconnected websocket: {request.remote}")
         return ws
@@ -373,7 +374,7 @@ class Frontend:
             async for msg in mbox.messages()
         ]
 
-        result.sort(key=lambda x: x["date"], reverse=True)  # type: ignore
+        result.sort(key=lambda x: x["date"], reverse=True)
 
         await ws.send_json(
             {
@@ -600,7 +601,7 @@ class Frontend:
                 and part.get_filename() == attachment
             ):
                 cte = part.get("Content-Transfer-Encoding")
-                body = part.get_payload(decode=bool(cte))
+                body = extract_payload(part, bool(cte))
                 return web.Response(
                     body=body,
                     headers={

@@ -1,4 +1,0 @@
-[run]
-source = */mail_devel/*
-concurrency = multiprocessing
-parallel = True

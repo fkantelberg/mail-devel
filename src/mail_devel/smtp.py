@@ -6,7 +6,7 @@ import re
 from email.message import Message
 from logging import Logger
 from types import ModuleType
-from typing import Callable, Iterable, Type
+from typing import Callable, Iterable, Iterator, Type
 
 from aiosmtpd.handlers import AsyncMessage
 from aiosmtpd.smtp import Envelope, Session
@@ -25,13 +25,13 @@ class Reply:
         self.flags = set(flags or [])
 
 
-def dummy(_message: Message, _flags: set[str], _logger: logging.Logger) -> Reply | None:
-    """No auto respond mail"""
-    return None
-
-
 __all__ = ["Flag", "Logger", "Message", "Reply"]
-Responder = Callable[[Message, set[str], logging.Logger], Reply]
+Response = Iterator[Reply]
+Responder = Callable[[Message, set[str], logging.Logger], Response]
+
+
+def dummy(_message: Message, _flags: set[str], _logger: logging.Logger) -> Response:  # type: ignore
+    """No auto respond mail"""
 
 
 class MemoryHandler(AsyncMessage):
@@ -132,16 +132,16 @@ class MemoryHandler(AsyncMessage):
         if not self.responder or not callable(self.responder):
             return
 
-        reply = self.responder(
+        for reply in self.responder(
             message,
             self._default_flags(),
             _reply_logger,
-        )
-        if isinstance(reply, Reply) and reply.message:
-            await self.mailboxes.append(
-                reply.message,
-                flags=self._convert_flags(reply.flags),
-            )
+        ):
+            if isinstance(reply, Reply) and reply.message:
+                await self.mailboxes.append(
+                    reply.message,
+                    flags=self._convert_flags(reply.flags),
+                )
 
     def prepare_message(self, session: Session, envelope: Envelope) -> Message:
         if envelope.smtp_utf8 and isinstance(envelope.content, (bytes, bytearray)):
