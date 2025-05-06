@@ -74,11 +74,11 @@ Please use `--help` for a more complete overview of the configurations.
 
   - **Multi User Mode:** The mails are collected in the specific mailboxes for each receiver of the messages using the `to`, `cc`, and `bcc` mail headers.
 
-- `--auto-responder`: Automatically respond to the mails coming in via SMTP
+- `--smtp-responder`: Automatically respond to the mails coming in via SMTP
 
-  - `--auto-responder reply_once`: Reply once per mail thread
-  - `--auto-responder reply_always`: Always reply to incoming mails
-  - `--auto-responder path/to/script.py`: Custom auto responder. See [the examples](https://github.com/fkantelberg/mail-devel/blob/master/src/mail_devel/automation)
+  - `--smtp-responder reply_once`: Reply once per mail thread
+  - `--smtp-responder reply_always`: Always reply to incoming mails
+  - `--smtp-responder path/to/script.py`: Custom auto responder. See [the examples](https://github.com/fkantelberg/mail-devel/blob/master/src/mail_devel/automation)
 
 ## Supported protocols for mails
 
