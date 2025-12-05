@@ -11,8 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from aiohttp import ClientSession
-from mail_devel import Service
-from mail_devel import __main__ as main
+from mail_devel import Service, __main__ as main
 from mail_devel.smtp import Flag
 
 MAIL = """
@@ -573,9 +572,10 @@ async def test_smtp_auth() -> None:
 
         assert len([msg async for msg in mailbox.messages()]) == 2
 
-        with pytest.raises(SMTPAuthenticationError), SMTP(
-            "localhost", port=port
-        ) as smtp:
+        with (
+            pytest.raises(SMTPAuthenticationError),
+            SMTP("localhost", port=port) as smtp,
+        ):
             smtp.login("invalid", pw)
 
         service.handler.load_responder("reply_once")

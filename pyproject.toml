@@ -46,7 +46,7 @@ disable="""
 [tool.ruff]
 line-length = 88
 indent-width = 4
-target-version = "py38"
+target-version = "py312"
 
 [tool.ruff.lint]
 ignore = ["E203", "E266", "E501", "F403", "F401"]
