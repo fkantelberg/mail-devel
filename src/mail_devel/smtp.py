@@ -24,6 +24,10 @@ class Reply:
         self.message = message
         self.flags = set(flags or [])
 
+    @property
+    def message_id(self) -> str | None:
+        return self.message["Message-Id"]
+
 
 __all__ = ["Flag", "Logger", "Message", "Reply"]
 Response = Iterator[Reply]
@@ -138,6 +142,10 @@ class MemoryHandler(AsyncMessage):
             _reply_logger,
         ):
             if isinstance(reply, Reply) and reply.message:
+                _logger.info(
+                    f"Auto responded {message['Message-Id'] or 'n/a'} with "
+                    f"{reply.message_id or 'n/a'}"
+                )
                 await self.mailboxes.append(
                     reply.message,
                     flags=self._convert_flags(reply.flags),
@@ -153,10 +161,12 @@ class MemoryHandler(AsyncMessage):
         return super().prepare_message(session, envelope)
 
     async def handle_message(self, message: Message) -> None:
-        _logger.info(f"Got message {message['From']} -> {message['To']}")
         if not message["Message-Id"] and self.ensure_message_id:
             message.add_header("Message-Id", Builder.message_id())
 
+        _logger.info(
+            f"Got message {message['Message-Id']}: {message['From']} -> {message['To']}"
+        )
         await self.mailboxes.append(
             message,
             flags=self._convert_flags(self._default_flags()),

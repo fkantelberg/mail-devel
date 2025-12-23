@@ -23,6 +23,7 @@ disable="""
   bad-mcs-classmethod-argument,
   broad-except,
   deprecated-pragma,
+  duplicate-code,
   file-ignored,
   invalid-name,
   locally-disabled,

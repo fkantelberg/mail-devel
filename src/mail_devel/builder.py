@@ -19,7 +19,7 @@ class Builder:
         return f"{secrets.token_hex(8)}@mail-devel"
 
     @staticmethod
-    def reply_mail(message: Message) -> Message:
+    def reply_mail(message: Message, *, use_reply_to: bool = False) -> Message:
         body = ""
         if message.is_multipart():
             for part in message.walk():
@@ -41,7 +41,7 @@ class Builder:
             reply.add_header("References", f"{msg_id} {message.get('References', '')}")
 
         reply.add_header("Subject", f"Re: {message['Subject']}")
-        reply.add_header("To", message["From"])
+        reply.add_header("To", use_reply_to and message["Reply-To"] or message["From"])
         reply.add_header("From", Builder.mail_address())
         if message["CC"]:
             reply.add_header("CC", message["CC"])

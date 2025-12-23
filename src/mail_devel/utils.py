@@ -4,7 +4,7 @@ import ssl
 import sys
 from email.message import Message
 
-VERSION = "0.15.0"
+VERSION = "0.15.1"
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"
@@ -108,6 +108,10 @@ def extract_payload(message: Message, decode: bool) -> str:
 
     content = message.get_payload(decode=False)
     return content if isinstance(content, str) else ""
+
+
+def str2bool(x: str | None) -> bool:
+    return (x or "").lower() in ("yes", "y", "on", "1")
 
 
 def valid_file(path: str, is_directory: bool = False) -> str:

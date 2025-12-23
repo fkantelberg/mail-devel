@@ -1,6 +1,9 @@
 import argparse
 import asyncio
+import os
+import re
 from contextlib import asynccontextmanager
+from email import message_from_string
 from imaplib import IMAP4
 from random import randint
 from secrets import token_hex
@@ -12,6 +15,7 @@ from unittest.mock import patch
 import pytest
 from aiohttp import ClientSession
 from mail_devel import Service, __main__ as main
+from mail_devel.builder import Builder
 from mail_devel.smtp import Flag
 
 MAIL = """
@@ -23,6 +27,7 @@ Content-Language: en-US
 To: test@localhost, second <second@localhost>
 Cc: cc@localhost
 Bcc: bcc@localhost
+Reply-To: xx@localhost
 From: test <test@example.org>
 Subject: hello
 
@@ -590,6 +595,14 @@ async def test_smtp_auth() -> None:
         assert Flag(b"\\Seen") in msgs[-2].permanent_flags
         assert Flag(b"\\Seen") not in msgs[-1].permanent_flags
 
+        with patch.dict(os.environ, {"MAIL_USE_REPLY_TO": "on"}):
+            with SMTP("localhost", port=port) as smtp:
+                smtp.login("test", pw)
+                smtp.sendmail("test@example.org", "test@example.org", MAIL)
+
+            msgs = [msg async for msg in mailbox.messages()]
+            assert len(msgs) == 6
+
 
 @pytest.mark.asyncio
 async def test_smtp_auth_multi_user() -> None:
@@ -728,3 +741,25 @@ async def test_main() -> None:
     with patch("mail_devel.__main__.sleep_forever", autospec=True) as mock:
         await main.run(args)
         mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_builder() -> None:
+    msg_id_regex = re.compile(r"^<[0-9a-fA-F\-]+@mail-devel>$")
+    addr_regex = re.compile(r"^[0-9a-fA-F]+@mail-devel$")
+
+    assert msg_id_regex.match(Builder.message_id())
+    assert addr_regex.match(Builder.mail_address())
+
+    mail = message_from_string(MAIL)
+    reply = Builder.reply_mail(mail)
+    assert msg_id_regex.match(reply["Message-Id"])
+    assert addr_regex.match(reply["From"])
+    assert reply["To"] == mail["From"]
+
+    reply = Builder.reply_mail(mail, use_reply_to=True)
+    assert reply["To"] == mail["Reply-To"]
+
+    mail.replace_header("Reply-To", "")
+    reply = Builder.reply_mail(mail, use_reply_to=True)
+    assert reply["To"] == mail["From"]
