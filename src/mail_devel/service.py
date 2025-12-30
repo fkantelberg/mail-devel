@@ -98,6 +98,18 @@ class Service:
         service.mailboxes = TestMailboxDict(
             service.config, service.filter_set, args.multi_user
         )
+
+        if args.multi_user and args.alias:
+            service.mailboxes.load_aliases(
+                dict(
+                    mapping.split(":")
+                    for mapping in args.alias
+                    if mapping.count(":") == 1
+                )
+            )
+        elif args.alias:
+            _logger.warning("Aliases are only supported in multi-user mode")
+
         service.imap = IMAPService(service.backend, service.config)
 
         # Create the SMTP and optionally SMTPS service
@@ -195,6 +207,14 @@ class Service:
             action="store_true",
             help="Switches from the single mailbox to multi mailbox mode. The "
             "password will be reused for every mailbox",
+        )
+        parser.add_argument(
+            "--alias",
+            action="append",
+            default=[],
+            help="Specify an e-mail alias like <alias>:<target>. Multiple alias "
+            "can be used. Unix shell-style wildcards are allowed as alias (e.g. "
+            "'t*@example.org:demo@example.org')",
         )
         pw = parser.add_argument(
             "--password",

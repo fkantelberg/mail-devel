@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from email.message import Message
 from email.utils import getaddresses
+from fnmatch import fnmatch
 
 from pymap.backend.dict import Config
 from pymap.backend.dict.filter import FilterSet
@@ -30,12 +31,29 @@ class TestMailboxDict:
         self.config: Config = config
         self.filter_set: FilterSet = filter_set
         self.multi_user: bool = multi_user
+        self.aliases: dict[str, str] = {}
 
     def __contains__(self, user: str) -> bool:
         return not self.multi_user or user in self.config.set_cache
 
     def __getitem__(self, user: str) -> MailboxSet:
         return self.config.set_cache[user][0]
+
+    def load_aliases(self, aliases: dict[str, str]) -> None:
+        """Register new aliases"""
+        self.aliases.update(aliases)
+
+    def apply_alias(self, address: str) -> str:
+        """Try to map the address against the aliases or return the address again"""
+        if not self.multi_user or not address:
+            return address
+
+        for alias, target in self.aliases.items():
+            if fnmatch(address, alias):
+                _logger.info(f"Redirecting {address} to {target} because of {alias}")
+                return target
+
+        return address
 
     async def inbox_stats(self) -> dict[str, int]:
         stats = {}
@@ -89,8 +107,12 @@ class TestMailboxDict:
             await mailboxset.append(append_msg)
             return
 
+        received: set[str] = set()
         for _, address in getaddresses(list(addresses)):
-            if address:
+            address = self.apply_alias(address)
+            if address and address not in received:
                 account = await self.get(address)
                 mbox = await account.get_mailbox(mailbox)
                 await mbox.append(append_msg)
+
+                received.add(address)

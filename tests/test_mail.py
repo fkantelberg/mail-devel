@@ -550,6 +550,44 @@ async def test_memory_handler() -> None:
 
 
 @pytest.mark.asyncio
+async def test_aliases() -> None:
+    pw = token_hex(10)
+    # No alias because single user mode
+    service = await build_test_service(pw, alias="t*@example.org:demo@example.org")
+    assert service.mailboxes
+    assert service.mailboxes.aliases == {}
+
+    service = await build_test_service(
+        pw, multi_user=None, alias="t*@localhost:demo@example.org"
+    )
+    assert service.mailboxes
+    assert service.mailboxes.aliases == {"t*@localhost": "demo@example.org"}
+
+    mail = message_from_string(MAIL)
+    await service.mailboxes.append(mail, frozenset([]))
+    await asyncio.sleep(0.2)
+
+    counters = await service.mailboxes.inbox_stats()
+    assert counters.get("test@localhost") is None
+    assert counters.get("demo@example.org") == 1
+
+    service.mailboxes.aliases = {"*@localhost": "demo2@example.org"}
+    await service.mailboxes.append(mail, frozenset([]))
+    await asyncio.sleep(0.2)
+
+    counters = await service.mailboxes.inbox_stats()
+    assert counters.get("test@localhost") is None
+    assert counters.get("demo2@example.org") == 1
+
+    service.mailboxes.aliases = {}
+    await service.mailboxes.append(mail, frozenset([]))
+    await asyncio.sleep(0.2)
+
+    counters = await service.mailboxes.inbox_stats()
+    assert counters.get("test@localhost") == 1
+
+
+@pytest.mark.asyncio
 async def test_smtp_auth() -> None:
     (port,) = unused_ports()
     pw = token_hex(10)

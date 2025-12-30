@@ -21,6 +21,7 @@ DO NOT USE FOR PRODUCTION.
 - Minimal HTTP frontend to support the basic testing
 - SMTP auto respond feature for automatic testing (see `--smtp-responder`)
 - Single or multi mail account mode (see [configuration](#configuration))
+- Mail aliases if in multi account mode
 
 ## Usage
 
@@ -72,7 +73,9 @@ Please use `--help` for a more complete overview of the configurations.
 
   - **Single User Mode:** All mails are collected in a single mailbox which belongs to the defined user.
 
-  - **Multi User Mode:** The mails are collected in the specific mailboxes for each receiver of the messages using the `to`, `cc`, and `bcc` mail headers.
+  - **Multi User Mode:** The mails are collected in the specific mailboxes for each receiver of the messages using the `to`, `cc`, and `bcc` mail headers. Allows the usage of mail aliases
+
+- `--alias`: Can be specified multiple times to map mail addresses using UNIX shell-style wildcards
 
 - `--smtp-responder`: Automatically respond to the mails coming in via SMTP
 
