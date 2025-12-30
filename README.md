@@ -75,7 +75,7 @@ Please use `--help` for a more complete overview of the configurations.
 
   - **Multi User Mode:** The mails are collected in the specific mailboxes for each receiver of the messages using the `to`, `cc`, and `bcc` mail headers. Allows the usage of mail aliases
 
-- `--alias`: Can be specified multiple times to map mail addresses using UNIX shell-style wildcards
+- `--alias`: Can be specified multiple times to map mail addresses using UNIX shell-style wildcards. Aliases can also be specified via a comma-separated list in the environment variable `MAIL_ALIAS`
 
 - `--smtp-responder`: Automatically respond to the mails coming in via SMTP
 

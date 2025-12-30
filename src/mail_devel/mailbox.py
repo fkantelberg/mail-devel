@@ -42,6 +42,7 @@ class TestMailboxDict:
     def load_aliases(self, aliases: dict[str, str]) -> None:
         """Register new aliases"""
         self.aliases.update(aliases)
+        _logger.info(f"Using alias mapping: {self.aliases}")
 
     def apply_alias(self, address: str) -> str:
         """Try to map the address against the aliases or return the address again"""

@@ -99,16 +99,25 @@ class Service:
             service.config, service.filter_set, args.multi_user
         )
 
-        if args.multi_user and args.alias:
-            service.mailboxes.load_aliases(
+        # Try to parse mail aliases
+        aliases = {}
+        if args.multi_user:
+            full_mapping = args.alias or []
+            if "MAIL_ALIAS" in os.environ:
+                full_mapping.extend(os.environ["MAIL_ALIAS"].split(","))
+
+            aliases.update(
                 dict(
-                    mapping.split(":")
-                    for mapping in args.alias
+                    mapping.strip().split(":")
+                    for mapping in full_mapping
                     if mapping.count(":") == 1
                 )
             )
-        elif args.alias:
+
+        if not args.multi_user and aliases:
             _logger.warning("Aliases are only supported in multi-user mode")
+        elif aliases:
+            service.mailboxes.load_aliases(aliases)
 
         service.imap = IMAPService(service.backend, service.config)
 
