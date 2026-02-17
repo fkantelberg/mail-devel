@@ -31,8 +31,13 @@ _logger = logging.getLogger(__name__)
 Mail = dict[str, Any]
 
 
-def decode_header(value: str) -> str:
-    return str(header.make_header(header.decode_header(value)))
+def decode_header(value: str, delimiter: str = " ") -> str:
+    parts = [
+        part.decode(encoding or "utf-8").strip() if isinstance(part, bytes) else part
+        for part, encoding in header.decode_header(value)
+    ]
+
+    return delimiter.join(parts)
 
 
 def decode_payload(part: Message) -> str:
@@ -235,7 +240,7 @@ class Frontend:
                 cdispo = part.get_content_disposition()
 
                 if cdispo == "attachment":
-                    name = part.get_filename()
+                    name = decode_header(part.get_filename() or "", "")
                     attachments.append(
                         {"name": name, "url": f"/attachment/{msg_hash}/{name}"}
                     )
@@ -596,18 +601,15 @@ class Frontend:
             raise web.HTTPNotFound()
 
         for part in message.walk():
-            if (
-                part.get_content_disposition() == "attachment"
-                and part.get_filename() == attachment
-            ):
-                cte = part.get("Content-Transfer-Encoding")
-                body = extract_payload(part, bool(cte))
-                return web.Response(
-                    body=body,
-                    headers={
-                        "Content-Type": part.get("Content-Type", ""),
-                        "Content-Disposition": part.get("Content-Disposition", ""),
-                    },
-                )
+            if part.get_content_disposition() != "attachment":
+                continue
+
+            if decode_header(part.get_filename() or "", "") != attachment:
+                continue
+
+            cte = part.get("Content-Transfer-Encoding")
+            body = extract_payload(part, bool(cte))
+
+            return web.Response(body=body, content_type=part.get_content_type())
 
         raise web.HTTPNotFound()

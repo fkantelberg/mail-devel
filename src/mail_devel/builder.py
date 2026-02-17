@@ -20,13 +20,16 @@ class Builder:
 
     @staticmethod
     def reply_mail(message: Message, *, use_reply_to: bool = False) -> Message:
-        body = ""
+        body: str | bytes = ""
         if message.is_multipart():
             for part in message.walk():
                 if part.get_content_type() == "text/plain":
                     body = utils.extract_payload(part, True)
         elif message.get_content_type() == "text/plain":
             body = utils.extract_payload(message, True)
+
+        if not isinstance(body, str):
+            body = ""
 
         reply = MIMEMultipart()
         if body:

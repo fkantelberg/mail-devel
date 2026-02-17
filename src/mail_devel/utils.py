@@ -4,7 +4,7 @@ import ssl
 import sys
 from email.message import Message
 
-VERSION = "0.16.0"
+VERSION = "0.16.1"
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"
@@ -101,10 +101,13 @@ def convert_size(x: str) -> int:
     return int(float(x))
 
 
-def extract_payload(message: Message, decode: bool) -> str:
+def extract_payload(message: Message, decode: bool) -> str | bytes:
     if decode:
         content = message.get_payload(decode=True)
-        return content.decode() if isinstance(content, bytes) else ""
+        try:
+            return content.decode() if isinstance(content, bytes) else ""
+        except UnicodeDecodeError:
+            return content if isinstance(content, bytes) else ""
 
     content = message.get_payload(decode=False)
     return content if isinstance(content, str) else ""
