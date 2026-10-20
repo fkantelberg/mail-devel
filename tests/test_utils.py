@@ -6,21 +6,16 @@ import pytest
 
 from mail_devel import utils
 
-CA_CERT = "pki/ca.pem"
-SERVER_CERT = "pki/server.pem"
-SERVER_KEY = "pki/server.key"
-CRL = "pki/crl.pem"
-
-with subprocess.Popen(["./certs.sh", "server"], stdin=subprocess.PIPE) as proc:
-    proc.communicate(b"y\n" * 80)
-
 
 def test_generate_ssl_context() -> None:
+    with subprocess.Popen(["./certs.sh", "server"], stdin=subprocess.PIPE) as proc:
+        proc.communicate(b"y\n" * 80)
+
     server = utils.generate_ssl_context(
-        cert=SERVER_CERT,
-        key=SERVER_KEY,
-        ca=CA_CERT,
-        crl=CRL,
+        cert="pki/server.pem",
+        key="pki/server.key",
+        ca="pki/ca.pem",
+        crl="pki/crl.pem",
     )
 
     assert isinstance(server, ssl.SSLContext)

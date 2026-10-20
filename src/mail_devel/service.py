@@ -4,6 +4,7 @@ import logging
 import os
 import secrets
 import ssl
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -237,6 +238,12 @@ class Service:
             action="store_true",
             help="Generate the SMTP and IMAP password and print at start",
         )
+        parser.add_argument(
+            "--version",
+            default=False,
+            action="store_true",
+            help="Print the version and exit",
+        )
 
         group = parser.add_argument_group("IMAP")
         group.add_argument(
@@ -247,7 +254,7 @@ class Service:
         group.add_argument(
             "--imap-port",
             metavar="PORT",
-            default=int(os.environ.get("MAIL_IMAP_PORT", 4143)),
+            default=int(os.environ.get("MAIL_IMAP_PORT") or 4143),
             help="The port of the IMAP interface. Can also be set using the "
             "environment variable MAIL_IMAP_PORT. Default is %(default)s",
         )
@@ -261,7 +268,7 @@ class Service:
         group.add_argument(
             "--http-port",
             metavar="PORT",
-            default=int(os.environ.get("MAIL_HTTP_PORT", 4080)),
+            default=int(os.environ.get("MAIL_HTTP_PORT") or 4080),
             help="The port of the HTTP interface. Can also be set using the "
             "environment variable MAIL_HTTP_PORT. Default is %(default)s",
         )
@@ -297,14 +304,14 @@ class Service:
         group.add_argument(
             "--smtp-port",
             metavar="PORT",
-            default=int(os.environ.get("MAIL_SMTP_PORT", 4025)),
+            default=int(os.environ.get("MAIL_SMTP_PORT") or 4025),
             help="The port of the SMTP interface. Can also be set using the "
             "environment variable MAIL_SMTP_PORT. Default is %(default)s",
         )
         group.add_argument(
             "--smtps-port",
             metavar="PORT",
-            default=int(os.environ.get("MAIL_SMTPS_PORT", 4465)),
+            default=int(os.environ.get("MAIL_SMTPS_PORT") or 4465),
             help="The port of the SMTPS interface. Can also be set using the "
             "environment variable MAIL_SMTPS_PORT. Requires --cert and --key. "
             "Default is %(default)s",
@@ -378,6 +385,9 @@ class Service:
         )
 
         parsed = parser.parse_args(args)
+        if parsed.version:
+            print(utils.VERSION)
+            sys.exit(0)
         if parsed.gen_password:
             parsed.password = secrets.token_hex(16)
         if not parsed.password:

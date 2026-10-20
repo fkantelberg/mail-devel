@@ -9,6 +9,7 @@
 .tox/
 __pycache__/
 build/
+deb_dist/
 dist/
 htmlcov
 pki/
