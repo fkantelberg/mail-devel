@@ -4,8 +4,8 @@ import logging
 import os
 import secrets
 import ssl
+from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import AsyncGenerator
 
 from aiosmtpd.controller import Controller
 from pymap.backend.dict import Config, DictBackend
@@ -21,7 +21,7 @@ from .smtp import MemoryHandler
 try:
     from typing import Self
 except ImportError:
-    from typing_extensions import Self
+    from typing import Self
 
 _logger = logging.getLogger(__name__)
 

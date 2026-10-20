@@ -3,10 +3,10 @@ import importlib.util
 import logging
 import os
 import re
+from collections.abc import Callable, Iterable, Iterator
 from email.message import Message
 from logging import Logger
 from types import ModuleType
-from typing import Callable, Iterable, Iterator, Type
 
 from aiosmtpd.handlers import AsyncMessage
 from aiosmtpd.smtp import Envelope, Session
@@ -45,7 +45,7 @@ class MemoryHandler(AsyncMessage):
         *,
         flagged_seen: bool = False,
         ensure_message_id: bool = True,
-        message_class: Type[Message] | None = None,
+        message_class: type[Message] | None = None,
         multi_user: bool = False,
         responder: str | None = None,
     ) -> None:

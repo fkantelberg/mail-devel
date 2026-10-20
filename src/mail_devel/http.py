@@ -13,7 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from importlib import resources
-from typing import Any, Tuple
+from typing import Any
 
 import aiohttp
 from aiohttp import web
@@ -109,7 +109,7 @@ class Frontend:
         self.client_max_size: int = client_max_size
         self.multi_user: bool = multi_user
 
-        self.mail_cache: dict[str, Tuple[str, str, int]] = {}
+        self.mail_cache: dict[str, tuple[str, str, int]] = {}
 
     def load_resource(self, resource: str) -> str:
         if self.devel:  # pragma: no cover
