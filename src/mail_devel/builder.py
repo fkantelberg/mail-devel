@@ -3,6 +3,7 @@ import uuid
 from email.message import Message
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
 
 from . import utils
 
@@ -46,6 +47,7 @@ class Builder:
         reply.add_header("Subject", f"Re: {message['Subject']}")
         reply.add_header("To", use_reply_to and message["Reply-To"] or message["From"])
         reply.add_header("From", Builder.mail_address())
+        reply.add_header("Date", formatdate())
         if message["CC"]:
             reply.add_header("CC", message["CC"])
 

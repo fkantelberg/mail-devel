@@ -11,6 +11,7 @@ from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
 from importlib import resources
 from typing import Any, Tuple
 
@@ -424,6 +425,7 @@ class Frontend:
             "message-id": Builder.message_id(),
             "to": account,
             "from": Builder.mail_address(),
+            "date": formatdate(),
         }
         _logger.info("Randomized mail")
         await ws.send_json(
