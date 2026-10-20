@@ -40,7 +40,7 @@ class MailClient {
     this.mailboxes = document.querySelector("#nav #mailboxes");
     this.mailbox = document.querySelector("#mailbox table tbody");
     this.wrapper = document.querySelector("#wrapper");
-    this.fixed_headers = ["from", "to", "cc", "bcc", "subject"];
+    this.fixed_headers = ["from", "to", "cc", "bcc", "subject", "date"];
     this.account_name = null;
     this.mailbox_name = null;
     this.mail_uid = null;
@@ -504,6 +504,11 @@ class MailClient {
     document.querySelector("#editor").classList.remove("hidden");
   }
 
+  async on_mail_datetime(data) {
+    if (data.datetime)
+      document.querySelector("#editor-date input").value = data.datetime;
+  }
+
   async _mail_row_fill(row, msg) {
     const self = this;
 
@@ -532,6 +537,7 @@ class MailClient {
     content(".from", msg.header?.from);
     content(".to", msg.header?.to);
     content(".subject", msg.header?.subject);
+    content(".date", msg.header?.date);
     const dt = new Date(msg.date);
     row.querySelector(".date").innerHTML = `${dt.toLocaleDateString()}<br />${dt.toLocaleTimeString()}`;
   }
@@ -594,6 +600,7 @@ class MailClient {
   }
 
   _display_mail(data) {
+    document.querySelector("#header-date input").value = data?.header?.date || "";
     document.querySelector("#header-from input").value = data?.header?.from || "";
     document.querySelector("#header-to input").value = data?.header?.to || "";
     document.querySelector("#header-cc input").value = data?.header?.cc || "";
@@ -695,10 +702,12 @@ class MailClient {
       self.visibility();
     });
 
-    document.getElementById("btn-new").addEventListener("click", (ev) => {
+    document.getElementById("btn-new").addEventListener("click", async (ev) => {
       ev.preventDefault();
       document.querySelector("#editor").classList.remove("hidden");
       document.querySelector("#mailbox-control").classList.add("hidden");
+
+      await this.socket_send({"command": "format_datetime"});
     });
 
     document.getElementById("btn-random").addEventListener("click", (ev) => {

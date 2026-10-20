@@ -4,7 +4,7 @@ import ssl
 import sys
 from email.message import Message
 
-VERSION = "0.16.2"
+VERSION = "0.17.0"
 
 DEFAULT_LOG_LEVEL = "info"
 LOG_FORMAT = "{asctime} [{levelname:^8}] {message}"
@@ -14,7 +14,7 @@ LOG_LEVELS = {
     "debug": logging.DEBUG,
     "error": logging.ERROR,
     "info": logging.INFO,
-    "warn": logging.WARN,
+    "warn": logging.WARNING,
     "warning": logging.WARNING,
 }
 

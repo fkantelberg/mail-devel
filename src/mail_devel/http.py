@@ -258,6 +258,16 @@ class Frontend:
         result["content"] = bytes(content).decode()
         return result
 
+    async def on_format_datetime(self, ws: WebSocketResponse) -> None:
+        await ws.send_json(
+            {
+                "command": "mail_datetime",
+                "data": {
+                    "datetime": formatdate(),
+                },
+            }
+        )
+
     async def on_config(self, ws: WebSocketResponse) -> None:
         await ws.send_json(
             {
