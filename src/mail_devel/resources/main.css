@@ -20,11 +20,30 @@
   --light-primary: black;
   --light-secondary: #333;
   --light-highlight: lightgray;
-  --light-button: gray;
+  --light-button: lightgray;
 
   --slider: 20pt;
-  --font-big: 11pt;
+  --font-big: 10pt;
+  --font-normal: 9pt;
+  --font-small: 7pt;
+  --error: lightpink;
+  --error-text: black;
 }
+
+:root, :host {
+  --fa-family-classic: 'Font Awesome 7 Free';
+  --fa-font-solid: normal 900 1em/1 var(--fa-family-classic);
+}
+
+@font-face {
+  font-family: "Font Awesome 7 Free";
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url("fa-solid-900.woff2");
+}
+
+.fa-solid {--fa-style: 900}
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -65,16 +84,32 @@ body, input, select, textarea, table, .popup {
   color: var(--primary);
 }
 
+input {
+  border-style: dashed;
+  border-width: 0 0 1px 0;
+}
+input[readonly] {
+  border: 0;
+}
+
 button, .btn {
   appearance: auto;
   background-color: var(--button);
   border-radius: 2px;
   border: 0;
   color: black;
+  font-size: var(--font-big);
+  padding: 5pt;
+  cursor: pointer;
   font-family: sans-serif;
   text-align: center;
   text-transform: capitalize;
   vertical-align: middle;
+}
+
+button.checked, .btn.checked {
+  background-color: var(--special);
+  color: var(--button);
 }
 
 #wrapper {
@@ -94,12 +129,27 @@ button, .btn {
 .highlight {color: var(--special)}
 .selected {background-color: var(--highlight)}
 .unseen .subject {font-weight: bold}
-.deleted .subject {text-decoration: line-through;}
+.deleted .subject {text-decoration: 3px line-through;}
 .italic {font-style: italic}
+.bold {font-weight: 900}
+.left {float: left}
+.right {float: right}
+.text-left {text-align: left}
+.text-right {text-align: right}
+.text-center {text-align: center}
+.font-small {font-size: var(--font-small)}
+.font-normal {font-size: var(--font-normal)}
+.font-big {font-size: var(--font-big)}
+.no-transition {transition: none !important}
+.full-width {width: 100%}
 .no-overflow {
   overflow-x: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+input.required {
+  background-color: var(--error);
+  color: var(--error-text);
 }
 
 #mail-content {grid-area: content}
@@ -108,18 +158,16 @@ button, .btn {
   display: flex;
   flex-direction: column;
   grid-area: nav;
-  padding: 0 15px;
+  padding: 0 5pt;
 }
 #mail-header {
   grid-area: header;
-  background-color: var(--highlight);
   border: 2px solid var(--border);
 }
 #accounts {padding: 5pt 2pt}
 #nav-dragbar {
-  background-color: var(--primary);
+  background-color: var(--secondary);
   grid-area: nav-drag;
-  cursor: ew-resize;
 }
 #mailbox-dragbar {
   background-color: var(--primary);
@@ -128,7 +176,7 @@ button, .btn {
 }
 
 #accounts, #nav-options, #mailboxes {
-  margin: 10px 0;
+  margin-top: 10px;
 }
 
 #mailboxes {
@@ -138,43 +186,49 @@ button, .btn {
   font-size: var(--font-big);
   margin-bottom: 0;
   height: 80%;
-  overflow-y: auto;
+  overflow: hidden auto;
   width: 100%;
 }
-#mailboxes option {padding: 5px}
-
-#mailbox {
-  overflow: auto scroll;
+#mailboxes .control {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 5px;
 }
+#mailboxes .option {
+  clear: both;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  padding: 0;
+}
+#mailboxes .option .name {margin: auto 5pt}
+
+#mailbox {overflow: auto scroll}
 #mailbox table {
   border-collapse: collapse;
   width: 100%;
 }
-#mailbox table.additional {
-  background-color: unset;
+#mailbox table td {
+  padding: 5px 10px;
+  overflow: hidden;
 }
-#mailbox table.additional td {
-  border: 0;
+#mailbox tr {
+  cursor: pointer;
+  transition: ease 0.4s;
 }
-#mailbox td.flags {
-  text-align: left;
-}
-#mailbox td.flags div {
+#mailbox td.flags span {
   cursor: pointer;
   margin: 2px;
 }
-#mailbox td.flags .btn {
-  padding: 0 2pt;
+#mailbox td.flags > span:has(input:checked) {
+  background-color: var(--special);
+  color: var(--button);
 }
-#mailbox td.flags input:not(:checked) + span {
-  text-decoration: 3px line-through;
-}
-#mailbox tr:hover {
-  background-color: var(--highlight)
-}
+#mailbox tr:hover {background-color: var(--highlight)}
 #mailbox .date, #mailbox .flags {
   padding: 0 4px;
-  text-align: right;
   width: 1px;
   white-space: nowrap;
 }
@@ -183,16 +237,13 @@ button, .btn {
   vertical-align: text-top;
   width: 12pt;
 }
-#mailbox .ordering.asc:before {content: "\25B4"}
-#mailbox .ordering.desc:before {content: "\25BC"}
 
 #mailbox table th {
-  border: 1px solid gray;
   background-color: var(--highlight);
   text-align: center !important;
 }
 
-#mailbox table td {border: 1px solid var(--border)}
+#mailbox table td {border-top: 1px solid var(--border)}
 
 #logo {
   font-family: monospace;
@@ -202,20 +253,16 @@ button, .btn {
 }
 #version {
   font-family: monospace;
-  font-size: 7pt;
+  font-size: var(--font-small);
   text-align: right;
   line-height: 1.0;
   height: 1em;
 }
 
-.header {
-  background-color: var(--highlight);
-}
 .header th {
   text-align: right;
   width: 100px;
 }
-.header .buttons td {text-align: right}
 .header input {
   box-sizing: border-box;
   width: 100%;
@@ -223,8 +270,6 @@ button, .btn {
   width: -webkit-fill-available;
   width: fill-available;
 }
-
-.buttons button {margin-right: 5px}
 
 .container {height: 100%; overflow: hidden}
 .container textarea, .container iframe {
@@ -241,11 +286,7 @@ button, .btn {
   display: none;
 }
 
-.btn-main {
-  font-size: var(--font-big);
-  padding: 5pt 2pt;
-  margin: 2px 0;
-}
+.btn-main {margin: 2px 0}
 #btn-dropdown button {
   cursor: pointer;
 }
@@ -269,7 +310,6 @@ button, .btn {
 #btn-dropdown a:hover {background: var(--highlight)}
 
 .popup {
-  background-color: var(--highlight);
   z-index: 1000;
   border-radius: 10px;
   padding: 10px;
@@ -284,127 +324,46 @@ button, .btn {
   right: 150px;
 }
 
-#mailbox-control {
-  background-color: var(--back);
-  border-color: var(--primary);
-  border-radius: 0 10px 10px 0;
-  border-width: 3px 3px 3px 0px;
-  position: fixed;
-  width: 250px;
-}
-#btn-mailbox-manage .icon {
-  float: right;
-}
-#btn-mailbox-manage .open.icon:before {content: "<"}
-#btn-mailbox-manage .icon:before {content: ">"}
-
 #editor {
   display: grid;
-  grid-template-rows: max-content max-content min-content auto;
+  grid-template-rows: max-content max-content auto;
 }
 
 #editor .content {
+  border-top: 2px solid var(--border);
   display: block;
   height: 100%;
-}
-#editor .attachments {
-  border-top: 0;
-  border-bottom: 2px solid var(--border);
-}
-#editor .header {
-  display: block;
-  max-height: 200px;
-  overflow-y: scroll;
-  padding: 3px;
-  border-bottom: 0;
 }
 #editor .header th {
   position: relative;
   min-width: 150px;
   max-width: 150px;
 }
-#editor .buttons button {
-  padding: 5pt 2pt;
-  width: 125px;
-}
-#mailbox-control .buttons button {
-  font-size: var(--font-big);
-  margin: 2px 0;
-  padding: 5pt 2pt;
-  width: 100%;
-}
-#mailbox-control #mailbox-name {
-  padding: 5px 0;
-  width: 100%;
-}
-#editor .header .delete {
-  content: "&#128465;";
-}
-#editor .buttons {
-  text-align: right;
-  padding: 3px;
-}
 #editor .header td {width: 100%}
-#editor .header .control {
-  min-width: 20px;
+#editor .header textarea {
+  width: 100%;
+  resize: vertical;
 }
-
-.switch {
-  font-size: var(--font-big);
-  height: 20px;
-  padding: 2px;
-  margin: 2px;
-  position: relative;
+#editor .advanced {
+  border: 1px dashed;
 }
-
-.switch label {
-  position: absolute;
-  display: inline-block;
-  width: 60px;
-  height: 20px;
-  right: 2px;
+#editor .attachments {
+  float: right;
+  padding: 5px 0;
+  width: 50%;
 }
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.switch .slider {
-  position: absolute;
+#editor .attachments input[type=file] {
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--back);
-  -webkit-transition: .4s;
-  transition: .4s;
+  border-width: 1px;
 }
-
-.switch .slider:before {
-  position: absolute;
-  content: "";
-  height: 12px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
-  background-color: var(--primary);
-  -webkit-transition: .4s;
-  transition: .4s;
+#editor .attachments input[type=file]::file-selector-button {
+  cursor: pointer;
+  margin-right: 20px;
+  border: none;
+  background: var(--button);
+  padding: 5pt;
+  border-radius: 2px;
 }
-
-.switch input:checked + .slider {
-  background-color: var(--special);
-}
-
-.switch input:focus + .slider {
-  box-shadow: 0 0 1px var(--special);
-}
-
-.switch input:checked + .slider:before {
-  -webkit-transform: translateX(26px);
-  -ms-transform: translateX(26px);
-  transform: translateX(26px);
+#editor-header {
+  margin-top: 5px;
 }

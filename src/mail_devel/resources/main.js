@@ -2,16 +2,6 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function element(tag, attrs) {
-  const ele = document.createElement(tag);
-  if (!attrs)
-    return ele;
-
-  for (let key in attrs)
-    ele.setAttribute(key, attrs[key]);
-  return ele;
-}
-
 function file_to_base64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -21,26 +11,36 @@ function file_to_base64(file) {
   });
 }
 
+function stop_event(ev) {
+  ev.preventDefault();
+  ev.stopPropagation();
+}
+
 function vis(selector, visible) {
   const elements = document.querySelectorAll(selector);
   if (!elements)
     return
 
   for (const element of elements)
-    if (visible)
-      element.classList.remove("hidden");
-    else
-      element.classList.add("hidden");
+    element.classList.toggle("hidden", !visible);
+}
+
+function checked(selector, checked) {
+  const elements = document.querySelectorAll(selector);
+  if (!elements)
+    return
+
+  for (const element of elements)
+    element.classList.toggle("checked", checked);
 }
 
 class MailClient {
   constructor() {
-    this.accounts = document.getElementById("accounts");
-    this.connection = document.querySelector("#connection input[type=checkbox]");
-    this.mailboxes = document.querySelector("#nav #mailboxes");
-    this.mailbox = document.querySelector("#mailbox table tbody");
-    this.wrapper = document.querySelector("#wrapper");
-    this.fixed_headers = ["from", "to", "cc", "bcc", "subject", "date"];
+    this.fixed_headers = ["date", "from", "to", "cc", "bcc", "subject"];
+
+    this.connection = true;
+    this.color_scheme = true;
+
     this.account_name = null;
     this.mailbox_name = null;
     this.mail_uid = null;
@@ -50,6 +50,7 @@ class MailClient {
     this.config = {};
 
     this.reset_drag();
+    this.reset_editor();
 
     this.connect_socket();
 
@@ -64,48 +65,57 @@ class MailClient {
   }
 
   async load_color_scheme() {
-    const toggle = document.querySelector("#color-scheme input");
     const scheme = localStorage.getItem("color-scheme");
     if (scheme)
-      toggle.checked = scheme === "dark";
+      this.color_scheme = scheme === "dark";
     else {
-      toggle.checked = (
+      this.color_scheme = (
         document.documentElement.classList.contains("dark") ||
         window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
       );
 
-      localStorage.setItem("color-scheme", toggle.checked ? "dark" : "light");
+      localStorage.setItem("color-scheme", this.color_scheme ? "dark" : "light");
     }
 
     await this.apply_color_scheme();
   }
 
   async apply_color_scheme() {
-    const toggle = document.querySelector("#color-scheme input");
-    if (toggle.checked) {
-      localStorage.setItem("color-scheme", "dark");
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("light");
-    } else {
-      localStorage.setItem("color-scheme", "light");
-      document.documentElement.classList.add("light");
-      document.documentElement.classList.remove("dark");
-    }
+    localStorage.setItem("color-scheme", this.color_scheme ? "dark": "light");
+    document.documentElement.classList.toggle("dark", this.color_scheme);
+    document.documentElement.classList.toggle("light", !this.color_scheme);
+
+    const ele = document.querySelector("#btn-color-scheme *");
+    ele.classList.toggle("fa-moon", this.color_scheme);
+    ele.classList.toggle("fa-sun", !this.color_scheme);
+    ele.title = `Switch to ${this.color_scheme ? "light" : "dark"} mode`;
+  }
+
+  async apply_connection() {
+    const ele = document.querySelector("#btn-connection *");
+    ele.classList.toggle("fa-repeat", this.connection);
+    ele.classList.toggle("fa-pause", !this.connection);
+    ele.title = `${this.connection ? "Disable" : "Enable"} connection`;
   }
 
   async visibility() {
-    vis("#btn-html", this.content_mode !== "html");
-    vis("#btn-plain", this.content_mode !== "plain");
-    vis("#btn-source", this.content_mode !== "source");
+    const simple_mode = this.editor_mode === "simple";
+
+    checked("#btn-html", this.content_mode === "html");
+    checked("#btn-plain", this.content_mode === "plain");
+    checked("#btn-source", this.content_mode === "source");
+
     vis("#mail-content iframe#html", this.content_mode === "html");
     vis("#mail-content textarea#plain", this.content_mode === "plain");
     vis("#mail-content textarea#source", this.content_mode === "source");
     vis("#editor .header .extra", this.editor_mode === "advanced");
-    vis("#editor #btn-add-header", this.editor_mode === "advanced");
+    vis("#editor .simple", simple_mode);
+    vis("#editor .advanced", !simple_mode);
 
-    document.getElementById("btn-advanced").innerText = (
-      `${this.editor_mode === "simple" ? "Advanced" : "Simple"} View`
-    );
+    const ele = document.querySelector("#btn-advanced *");
+    ele.classList.toggle("fa-eye-slash", simple_mode);
+    ele.classList.toggle("fa-eye", !simple_mode);
+    ele.parentNode.title = `Show ${simple_mode ? "Advanced" : "Simple"} View`;
   }
 
   async idle() {
@@ -135,6 +145,8 @@ class MailClient {
     this.socket.onclose = this.on_socket_close.bind(this);
     this.socket.onerror = this.on_socket_error.bind(this);
     this.socket.onopen = this.on_socket_open.bind(this);
+
+    this.apply_connection();
   }
 
   close_socket() {
@@ -142,6 +154,7 @@ class MailClient {
       this.socket.close();
 
     this.socket = null;
+    this.apply_connection();
   }
 
   async on_socket_message(event) {
@@ -164,7 +177,7 @@ class MailClient {
       console.log("Websocket connection died");
 
     this.socket = null;
-    if (this.connection.checked)
+    if (this.connection)
       setTimeout(1000, this.connect_socket.bind(this));
   }
 
@@ -228,29 +241,30 @@ class MailClient {
   }
 
   async on_list_accounts(data) {
+    const accounts = document.querySelector("#accounts");
+
     const self = this;
-    const accounts = data.accounts;
-    if (!accounts)
+    if (!data.accounts)
       return;
 
-    for (const opt of this.accounts.options) {
-      const idx = accounts.indexOf(opt.value);
+    for (const opt of accounts.options) {
+      const idx = data.accounts.indexOf(opt.value);
       if (idx < 0)
         opt.remove();
       else
-        accounts.splice(idx, 1);
+        data.accounts.splice(idx, 1);
     }
 
-    for (const account of accounts)
-      this.accounts.add(new Option(account, account));
+    for (const account of data.accounts)
+      accounts.add(new Option(account, account));
 
-    if (this.accounts.selectedIndex < 0) {
-      this.accounts.selectedIndex = 0;
-      if (this.accounts.options[0]) {
-        await self.load_mailboxes(this.accounts.options[0].value);
+    if (accounts.selectedIndex < 0) {
+      accounts.selectedIndex = 0;
+      if (accounts.options[0]) {
+        await self.load_mailboxes(accounts.options[0].value);
       }
     } else {
-      const selected = this.accounts.options[this.accounts.selectedIndex].value;
+      const selected = accounts.options[accounts.selectedIndex].value;
       if (this.account_name !== selected) {
         await self.load_mailboxes(selected);
       }
@@ -261,60 +275,71 @@ class MailClient {
     if (!account_name)
       account_name = this.account_name;
 
-    if (account_name)
+    if (account_name && this.connection)
       await this.socket_send({command: "list_mailboxes", account: account_name});
   }
 
   async on_list_mailboxes(data) {
     const self = this;
     const account_name = data.account;
+    const mailboxes = document.querySelector("#mailboxes");
+    const mailbox = document.querySelector("#mailbox table tbody");
+    let options = mailboxes.querySelectorAll("div.option") || [];
 
     if (this.account_name !== account_name) {
       this.mailbox_name = null;
       this.mail_uid = null;
-      this.mailbox.innerHTML = "";
-      this.mailboxes.selectedIndex = -1;
+      mailbox.innerHTML = "";
     }
 
     this.account_name = account_name;
 
-    const tmp = [];
-    for (const opt of this.mailboxes.options) {
-      const idx = data.mailboxes.indexOf(opt.value);
-      if (idx >= 0) {
-        tmp.push(opt);
-        data.mailboxes.splice(idx, 1);
-      }
+    // Generate enough options
+    const template = document.querySelector("#template-mailbox");
+    for (let i = options.length; i < data.mailboxes.length; i++) {
+      const option = document.importNode(template.content, true).querySelector("div.option");
+      mailboxes.append(option);
+
+      option.addEventListener("dragover", (ev) => {consume(ev)});
+      option.addEventListener("drop", self.ondrop_mailbox.bind(self));
+      option.addEventListener("click", (ev) => {
+        stop_event(ev);
+        if (option.value)
+          self.load_mailbox(option.value);
+      });
+      option.querySelector(".btn-del-folder").addEventListener("click", (ev) => {
+        stop_event(ev);
+        if (option.value)
+          self.delete_mailbox(option.value);
+      });
     }
 
-    for (const mailbox of data.mailboxes) {
-      const opt = new Option(mailbox, mailbox, true, this.mailbox_name === mailbox);
-      tmp.push(opt);
-
-      opt.addEventListener("dragover", (ev) => {ev.preventDefault();});
-      opt.addEventListener("drop", self.ondrop_mailbox.bind(self));
+    for (let i = data.mailboxes.length; i < options.length; i++) {
+      options[i].remove();
     }
 
-    // Sort
-    tmp.sort((a, b) => {
-      if (a.value === "INBOX")
-        return -1
-      else if (b.value === "INBOX")
-        return 1;
-      return a.value.localeCompare(b.value);
-    });
+    // Query again after the creation/deletion
+    options = mailboxes.querySelectorAll("div.option");
 
-    while (this.mailboxes.options.length)
-      this.mailboxes.options.remove(0);
+    // Fill the options and set up event listeners
+    for (const i in data.mailboxes) {
+      const mailbox = data.mailboxes[i];
+      const option = options[i];
 
-    for (const opt of tmp)
-      this.mailboxes.options.add(opt);
-
-    if (this.mailboxes.selectedIndex < 0) {
-      this.mailboxes.selectedIndex = 0;
-      if (this.mailboxes.options[0]) {
-        await self.load_mailbox(this.mailboxes.options[0].value);
+      // If no mailbox is selected the first gets used
+      if (!this.mailbox_name) {
+        this.mailbox_name = mailbox;
       }
+      option.value = mailbox;
+      option.querySelector(".name").innerHTML = mailbox;
+    }
+
+    self.apply_mailboxes_selection();
+  }
+
+  async apply_mailboxes_selection() {
+    for (const option of document.querySelectorAll("#mailboxes div.option")) {
+      option.classList.toggle("selected", this.mailbox_name === option.value);
     }
   }
 
@@ -322,7 +347,7 @@ class MailClient {
     if (!mailbox_name)
       mailbox_name = this.mailbox_name;
 
-    if (mailbox_name)
+    if (mailbox_name && this.connection)
       await this.socket_send(
         {command: "list_mails", account: this.account_name, mailbox: mailbox_name}
       );
@@ -334,55 +359,35 @@ class MailClient {
     if (!mailbox_name)
       return;
 
+    const mailbox = document.querySelector("#mailbox table tbody");
     if (this.mailbox_name !== mailbox_name) {
       this.mail_uid = null;
-      this.mailbox.innerHTML = "";
+      mailbox.innerHTML = "";
 
       // on change of mailbox, do clear mail display
       this._display_mail(undefined);
     }
 
+
     this.mailbox_name = mailbox_name;
-    const missing_msg = [];
-    const uids = [];
-    const lines = [];
-    const self = this;
-    for (const msg of mails) {
-      uids.push(msg.uid);
+    await this.apply_mailboxes_selection();
 
-      let found = false;
-      for (const line of this.mailbox.children) {
-        if (line.uid === msg.uid) {
-          found = true;
-          await self._mail_row_fill(line, msg);
-          lines.push(line);
-          break;
-        }
-      }
+    // Generate enough rows
+    const template = document.querySelector("#template-mail-row");
+    let rows = mailbox.querySelectorAll("tr");
+    for (let i = rows.length; i < mails.length; i++)
+      mailbox.append(await this._mail_row_init(template));
 
-      if (!found)
-        missing_msg.push(msg);
+    for (let i = mails.length; i < rows.length; i++)
+      rows[i].remove();
+
+    // Fill in the rows
+    if (this.sort_asc) mails.reverse();
+
+    rows = mailbox.querySelectorAll("tr");
+    for (let i = 0; i < mails.length; i++) {
+      await this._mail_row_fill(rows[i], mails[i]);
     }
-
-    const template = document.querySelector("#mail-row-template");
-    for (const msg of missing_msg) {
-      const row = await self._mail_row_init(template, msg);
-
-      row.uid = msg.uid;
-      row.addEventListener("dragstart", this.ondrag_mail.bind(this));
-      await self._mail_row_fill(row, msg);
-      lines.push(row);
-    }
-
-    for (const line of this.mailbox.children) {
-      if (uids.indexOf(line.uid) < 0 && line !== template)
-        line.remove();
-    }
-
-    if (this.sort_asc) lines.reverse();
-
-    for (const line of lines)
-      this.mailbox.append(line);
   }
 
   async load_mail(uid) {
@@ -423,19 +428,12 @@ class MailClient {
   }
 
   async send_mail() {
-    const headers = {};
-    for (const key of this.fixed_headers)
-      headers[key] = document.querySelector(`#editor-${key} input`).value;
-
-    for (const row of document.querySelectorAll("#editor .header .extra")) {
-      const inputs = row.querySelectorAll("input");
-      if (inputs.length < 2)
-        continue;
-
-      const key = inputs[0].value.trim().toLowerCase();
-      const value = inputs[1].value.trim().toLowerCase();
-      if (key && value && !this.fixed_headers.includes(key))
-        headers[key] = value;
+    let headers = {};
+    if (this.editor_mode === "simple") {
+      for (const key of this.fixed_headers)
+        headers[key] = document.querySelector(`input#editor-${key}`).value;
+    } else {
+      headers = document.querySelector("#editor-advanced").value;
     }
 
     const attachments = [];
@@ -505,69 +503,93 @@ class MailClient {
   }
 
   async on_mail_datetime(data) {
-    if (data.datetime)
-      document.querySelector("#editor-date input").value = data.datetime;
+    // The datetime string is created by the backend
+    if (data.datetime) {
+      document.querySelector("input#editor-date").value = data.datetime;
+
+      const advanced = document.querySelector("textarea#editor-advanced");
+      const line = `date: ${data.datetime}\n`;
+      const regex = /^date:.*$/gmi;
+      if (advanced.value.match(regex))
+        advanced.value = advanced.value.replace(regex, line);
+      else
+        advanced.value += line;
+
+      advanced.value = advanced.value.replaceAll(/\n{2,}/g, "\n").trim();
+    }
   }
 
   async _mail_row_fill(row, msg) {
     const self = this;
 
-    let ele = row.querySelector("td.flags .read input");
-    if ((msg?.flags || []).indexOf("seen") < 0) {
-      row.classList.add("unseen");
-      ele.checked = false;
-    } else {
-      row.classList.remove("unseen");
-      ele.checked = true;
-    }
+    row.classList.add("no-transition");
 
-    ele = row.querySelector("td.flags .deleted input");
-    if ((msg?.flags || []).indexOf("deleted") < 0) {
-      row.classList.remove("deleted");
-      ele.checked = false;
-    } else {
-      row.classList.add("deleted");
-      ele.checked = true;
-    }
+    row.uid = msg.uid;
+    let ele = row.querySelector("td.flags .read");
+    let checked = (msg?.flags || []).indexOf("seen") >= 0;
+
+    // Handle the read flag
+    ele.querySelector("input").checked = checked;
+    row.classList.toggle("unseen", !checked);
+    ele.classList.toggle("fa-envelope-open", checked);
+    ele.classList.toggle("fa-envelope", !checked);
+
+    // Handle the deleted flag
+    ele = row.querySelector("td.flags .deleted");
+    checked = (msg?.flags || []).indexOf("deleted") >= 0;
+    ele.querySelector("input").checked = checked;
+    row.classList.toggle("deleted", checked);
 
     function content(selector, val) {
       row.querySelector(selector).innerHTML = (val || "").replace("<", "&lt;");
     }
 
+    // Enter the content of the mail
     content(".from", msg.header?.from);
-    content(".to", msg.header?.to);
     content(".subject", msg.header?.subject);
-    content(".date", msg.header?.date);
-    const dt = new Date(msg.date);
-    row.querySelector(".date").innerHTML = `${dt.toLocaleDateString()}<br />${dt.toLocaleTimeString()}`;
+
+    // Enter the date
+    const dt_ele = row.querySelector(".date");
+    const dt = new Date(msg.header?.date || msg.date);
+    const diff = (new Date() - dt) / 1000;
+
+    dt_ele.title = `${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}`;
+
+    // Shorten the time for readability
+    if (diff < 60) {
+      dt_ele.innerHTML = "just now";
+    } else if (diff < 60 * 60) {
+      dt_ele.innerHTML = `${Math.floor(diff / 60)} min ago`;
+    } else if (diff < 24 * 60 * 60) {
+      dt_ele.innerHTML = dt.toLocaleTimeString();
+    } else {
+      dt_ele.innerHTML = dt.toLocaleDateString();
+    }
+
+    row.classList.remove("no-transition");
   }
 
-  async _mail_row_init(template, msg) {
+  async _mail_row_init(template) {
     const self = this;
 
-    const row = template.cloneNode(10);
-    row.removeAttribute("id");
-    row.classList.remove("hidden");
+    const tr = document.importNode(template.content, true).querySelector("tr");
 
-    row.querySelector("td.flags .read").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      self._mail_row_click(ev.target, "seen");
-    });
-
-    row.querySelector("td.flags .deleted").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      self._mail_row_click(ev.target, "deleted");
-    });
-
-    row.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
+    // Install the event listeners
+    tr.addEventListener("click", (ev) => {
+      stop_event(ev);
       self._mail_row_click(ev.target, "swap");
     });
+    tr.querySelector("td.flags .read").addEventListener("click", (ev) => {
+      stop_event(ev);
+      self._mail_row_click(ev.target, "seen");
+    });
+    tr.querySelector("td.flags .deleted").addEventListener("click", (ev) => {
+      stop_event(ev);
+      self._mail_row_click(ev.target, "deleted");
+    });
+    tr.addEventListener("dragstart", this.ondrag_mail.bind(this));
 
-    return row;
+    return tr;
   }
 
   async _mail_row_click(element, type) {
@@ -611,67 +633,33 @@ class MailClient {
     document.querySelector("#mail-content iframe#html").srcdoc = data?.body_html || "";
   }
 
-  async add_header(key = null, value = null) {
-    const table = document.querySelector("#editor .header");
-    const row = element("tr", {"class": "extra"});
-    const key_td = element("th"), value_td = element("td"), btn_td = element("td");
-    const btn = element("button", {"type": "button", "class": "delete"});
-    const key_input = element("input", {"type": "input"});
-    const value_input = element("input", {"type": "input"});
-
-    btn.innerHTML = "&#10006;";
-    if (key) key_input.value = key;
-    if (value) value_input.value = value;
-
-    key_td.append(key_input);
-    value_td.append(value_input);
-    btn_td.append(btn);
-
-    btn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      row.remove();
-    });
-
-    row.append(key_td);
-    row.append(value_td);
-    row.append(btn_td);
-    table.append(row);
-
-    await this.visibility();
-  }
-
   async reorder(asc) {
     this.sort_asc = asc;
 
     const element = document.querySelector("#mailbox .date .ordering");
     if (!element) return;
 
-    if (this.sort_asc) {
-      element.classList.add("asc");
-      element.classList.remove("desc");
-    } else {
-      element.classList.add("desc");
-      element.classList.remove("asc");
-    }
+    element.classList.toggle("fa-sort-down", this.sort_asc);
+    element.classList.toggle("fa-sort-up", !this.sort_asc);
 
     if (this.mailbox_name) await this.load_mailbox(this.mailbox_name);
   }
 
   async reset_editor(header = null, body = null) {
-    for (const row of document.querySelectorAll("#editor .header .extra"))
-      row.remove();
-
-    if (header)
-      for (const key in header) {
-        if (!this.fixed_headers.includes(key))
-          await this.add_header(key, header[key]);
-      }
-
-    for (const key of this.fixed_headers) {
-      const element = document.querySelector(`#editor-${key} input`);
-      element.value = (header && header[key]) ? header[key] : "";
+    let advanced = "";
+    for (const key in header || []) {
+      advanced += `${key}: ${header[key]}\n`;
     }
 
+    for (const key of this.fixed_headers) {
+      const element = document.querySelector(`input#editor-${key}`);
+      element.value = (header && header[key]) ? header[key] : "";
+
+      if (!header || !header[key])
+        advanced += `${key}:\n`;
+    }
+
+    document.querySelector("#editor-advanced").value = advanced;
     document.querySelector("#editor .content textarea").value = body || "";
     document.querySelector("#editor .attachments input").value = "";
   }
@@ -679,160 +667,112 @@ class MailClient {
   async initialize() {
     const self = this;
 
-    this.mailboxes.addEventListener("change", (ev) => {
-      ev.preventDefault();
-      self.load_mailbox(ev.target.value);
-    });
-
-    document.getElementById("btn-html").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-html").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.content_mode = "html";
       self.visibility();
     });
 
-    document.getElementById("btn-plain").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-plain").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.content_mode = "plain";
       self.visibility();
     });
 
-    document.getElementById("btn-source").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-source").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.content_mode = "source";
       self.visibility();
     });
 
-    document.getElementById("btn-new").addEventListener("click", async (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-new").addEventListener("click", async (ev) => {
+      stop_event(ev);
       document.querySelector("#editor").classList.remove("hidden");
-      document.querySelector("#mailbox-control").classList.add("hidden");
 
       await this.socket_send({"command": "format_datetime"});
     });
 
-    document.getElementById("btn-random").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-random").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.load_random_mail();
     });
 
     document.querySelector("#editor #btn-cancel").addEventListener("click", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       document.querySelector("#editor").classList.add("hidden");
       self.reset_editor();
     });
 
-    document.getElementById("btn-send").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-send").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.send_mail();
     });
 
-    document.getElementById("btn-reply").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-reply").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.load_reply_mail();
     });
 
-    document.getElementById("btn-advanced").addEventListener("click", (ev) => {
-      ev.preventDefault();
+    document.querySelector("#btn-advanced").addEventListener("click", (ev) => {
+      stop_event(ev);
       self.editor_mode = (self.editor_mode === "simple") ? "advanced" : "simple";
       self.visibility();
     });
 
-    document.getElementById("btn-add-header").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      self.add_header();
-    });
-
-    document.querySelector("#color-scheme").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      const toggle = document.querySelector("#color-scheme input");
-      toggle.checked = !toggle.checked;
+    document.querySelector("#btn-color-scheme").addEventListener("click", (ev) => {
+      stop_event(ev);
+      self.color_scheme = !self.color_scheme;
       self.apply_color_scheme();
     });
 
-    document.querySelector("#connection").addEventListener("click", (ev) => {
-      ev.preventDefault();
-
-      const toggle = document.querySelector("#connection input");
-      if (toggle.checked)
-        self.close_socket();
-      else
-        self.connect_socket();
-
-      toggle.checked = !toggle.checked;
+    document.querySelector("#btn-connection").addEventListener("click", (ev) => {
+      stop_event(ev);
+      this.connection = !this.connection;
+      this.apply_connection();
     });
 
     document.querySelector("#uploader input").addEventListener("change", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       self.upload_files(ev.target);
     });
 
     document.querySelector("#mailbox .date").addEventListener("click", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       localStorage.setItem("sort", self.sort_asc ? "desc" : "asc");
       self.reorder(!self.sort_asc);
     });
 
-    document.querySelector("#nav-dragbar").addEventListener("mousedown", (ev) => {
-      ev.preventDefault();
-      self.drag.nav = true;
-      self.wrapper.style.cursor = "ew-resize";
-    });
-
     document.querySelector("#mailbox-dragbar").addEventListener("mousedown", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       self.drag.mailbox = true;
       self.wrapper.style.cursor = "ns-resize";
     });
 
-    this.wrapper.addEventListener("mouseup", self.reset_drag.bind(self));
-    this.wrapper.addEventListener("mousemove", (ev) => {
-      ev.preventDefault();
+    const wrapper = document.querySelector("#wrapper");
+    wrapper.addEventListener("mouseup", (ev) => {
+      stop_event(ev);
+      self.reset_drag();
+    });
+    wrapper.addEventListener("mousemove", (ev) => {
+      stop_event(ev);
       self.ondrag(ev);
     });
 
-    document.querySelector("#btn-mailbox-manage").addEventListener(
-      "click", () => {
-        document.querySelector("#editor").classList.add("hidden");
-        self.visibility_mailbox_control();
-      }
-    );
-
-    document.querySelector("#mailbox-control #btn-cancel").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      self.visibility_mailbox_control(true);
+    document.querySelector("#mailbox-name").addEventListener("input", (ev) => {
+      if (ev.target.value)
+        ev.target.classList.remove("required");
     });
-
     document.querySelector("#btn-add-folder").addEventListener("click", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       self.add_mailbox(false);
     });
     document.querySelector("#btn-add-sub-folder").addEventListener("click", (ev) => {
-      ev.preventDefault();
+      stop_event(ev);
       self.add_mailbox(true);
-    });
-    document.querySelector("#btn-del-folder").addEventListener("click", (ev) => {
-      ev.preventDefault();
-      self.delete_mailbox();
     });
 
     await this.visibility();
     await this.idle();
-  }
-
-  async visibility_mailbox_control(force_close=false) {
-    const control = document.querySelector("#mailbox-control");
-    if (force_close)
-      control.classList.add("hidden")
-    else
-      control.classList.toggle("hidden");
-
-    const icon = document.querySelector("#btn-mailbox-manage .icon");
-    if (control.classList.contains("hidden"))
-      icon.classList.remove("open");
-    else
-      icon.classList.add("open");
-
-    this.reset_mailbox_control();
   }
 
   async add_mailbox(subfolder=false) {
@@ -846,48 +786,32 @@ class MailClient {
           name: input.value,
         }
       );
+    else {
+      input.classList.add("required");
+    }
   }
 
-  async delete_mailbox() {
+  async delete_mailbox(mailbox) {
     await this.socket_send(
       {
         command: "delete_mailbox",
         account: this.account_name,
-        name: this.mailbox_name,
+        name: mailbox,
       }
     );
   }
 
-  async reset_mailbox_control() {
-    const input = document.querySelector("#mailbox-name");
-    input.value = "";
-  }
-
   reset_drag() {
-    this.drag = {nav: false, mailbox: false};
+    this.drag = {mailbox: false};
     self.wrapper.style.cursor = "auto";
   }
 
-  apply_drag(nav=null, mailbox=null) {
-    if (nav) {
-      const pos = clamp(nav, 250, 300);
-      const dragbar = document.querySelector("#nav-dragbar");
-      const sizes = [
-        `${pos}px`,
-        `${dragbar.clientWidth}px`,
-        "auto",
-      ];
-      this.wrapper.style.gridTemplateColumns = sizes.join(" ");
-
-      const control = document.querySelector("#mailbox-control");
-      control.style.left = pos + "px";
-      control.style.top = this.mailboxes.offsetTop + "px";
-    }
-
+  apply_drag(mailbox=null) {
     if (mailbox) {
       const dragbar = document.querySelector("#mailbox-dragbar");
       const header = document.querySelector("#mail-header");
-      const max_height = this.wrapper.clientHeight - header.clientHeight - dragbar.clientHeight;
+      const wrapper = document.querySelector("#wrapper");
+      const max_height = wrapper.clientHeight - header.clientHeight - dragbar.clientHeight;
       const pos = clamp(mailbox, 50, max_height);
       const sizes = [
         `${pos}px`,
@@ -896,19 +820,14 @@ class MailClient {
         "auto",
       ];
 
-      this.wrapper.style.gridTemplateRows = sizes.join(" ");
+      wrapper.style.gridTemplateRows = sizes.join(" ");
     }
   }
 
   ondrag(ev) {
-    if (this.drag.nav) {
-      localStorage.setItem("drag-nav", event.clientX);
-      this.apply_drag(event.clientX, null);
-    }
-
     if (this.drag.mailbox) {
       localStorage.setItem("drag-mailbox", event.clientY);
-      this.apply_drag(null, event.clientY);
+      this.apply_drag(event.clientY);
     }
   }
 
@@ -917,7 +836,7 @@ class MailClient {
   }
 
   async ondrop_mailbox(ev) {
-    ev.preventDefault();
+    stop_event(ev);
     const mail_uid = ev.dataTransfer.getData("text");
     const mailbox_name = ev.target.value;
     if (mail_uid && mailbox_name)

@@ -11,6 +11,7 @@ from email.message import Message
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.parser import HeaderParser
 from email.utils import formatdate
 from importlib import resources
 from typing import Any
@@ -111,9 +112,9 @@ class Frontend:
 
         self.mail_cache: dict[str, tuple[str, str, int]] = {}
 
-    def load_resource(self, resource: str) -> str:
+    def load_resource(self, resource: str) -> bytes:
         if self.devel:  # pragma: no cover
-            with open(os.path.join(self.devel, resource), encoding="utf-8") as fp:
+            with open(os.path.join(self.devel, resource), "rb") as fp:
                 return fp.read()
 
         package = f"{__package__}.resources"
@@ -121,7 +122,7 @@ class Frontend:
         if not res.is_file():
             raise FileNotFoundError()
 
-        return res.read_text(encoding="utf-8")
+        return res.read_bytes()
 
     async def start(self) -> web.AppRunner:
         self.api = web.Application(client_max_size=self.client_max_size)
@@ -129,7 +130,7 @@ class Frontend:
         self.api.add_routes(
             [
                 web.get("/", self._page_index),
-                web.get(r"/{static:.*\.(css|js)}", self._page_static),
+                web.get(r"/{static:.*\.(css|js|woff2)}", self._page_static),
                 web.get("/websocket", self._websocket),
                 web.get(
                     r"/attachment/{mail:.*}/{attachment:.*}", self._download_attachment
@@ -188,6 +189,8 @@ class Frontend:
             mimetype = "text/javascript"
         elif static.endswith(".css"):
             mimetype = "text/css"
+        elif static.endswith(".woff2"):
+            mimetype = "font/woff2"
         else:  # pragma: no cover
             raise web.HTTPNotFound()
 
@@ -337,7 +340,11 @@ class Frontend:
             acc = self.mailboxes[account]
 
             mailboxes = await acc.list_mailboxes()
-            to_delete = [m.name for m in mailboxes.list() if m.name.startswith(name)]
+            to_delete = [
+                m.name
+                for m in mailboxes.list()
+                if m.name.startswith(name + "/") or m.name == name
+            ]
             for mbox_name in sorted(to_delete, reverse=True):
                 await acc.delete_mailbox(mbox_name)
         except (IndexError, KeyError):  # pragma: no cover
@@ -559,7 +566,12 @@ class Frontend:
         mail: Mail,
     ) -> None:
         header, body = map(mail.get, ("header", "body"))
-        if not isinstance(header, dict) or not isinstance(body, str):
+        if not isinstance(body, str):
+            return
+
+        if isinstance(header, str):
+            header = dict(HeaderParser().parsestr(header.strip()))
+        elif not isinstance(header, dict):
             return
 
         message = MIMEMultipart()

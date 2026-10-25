@@ -1,6 +1,36 @@
 [build-system]
-requires = ["setuptools >= 35.0.2", "wheel >= 0.29.0"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "mail-devel"
+dynamic = ["version"]
+authors = [
+  {name = "Florian Kantelberg", email = "florian.kantelberg@mailbox.org"},
+]
+requires-python = ">=3.11"
+dependencies = [
+  "aiohttp-jinja2",
+  "aiosmtpd",
+  "pymap~=0.36",
+  "passlib",
+  "typing-extensions",
+]
+description = "IMAP and SMTP in memory test server"
+readme = {file = "README.md", content-type = "text/markdown"}
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["imap", "smtp", "development"]
+classifiers = [
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+]
+
+[project.scripts]
+mail_devel = "mail_devel.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/fkantelberg/mail-devel"
 
 [tool.coverage]
 source = "*/mail_devel/*"
@@ -66,3 +96,13 @@ strict = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 timeout = 5
+addopts = ["--import-mode=importlib"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "mail_devel.utils.VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

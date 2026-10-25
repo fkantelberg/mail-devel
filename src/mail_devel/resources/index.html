@@ -7,6 +7,7 @@
   <title>mail-devel</title>
   <script type="text/javascript" src="main.js"></script>
   <link type="text/css" rel="stylesheet" href="main.css"/>
+  <link type="text/css" rel="stylesheet" href="fontawesome.min.css"/>
 </head>
 
 <body>
@@ -17,39 +18,40 @@
         <div id="version"></div>
       </div>
 
-      <div id="nav-options">
-        <div id="connection" class="switch">
-          <strong>Connection:</strong>
-          <label>
-            <input type="checkbox" checked="checked">
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div id="color-scheme" class="switch">
-          <strong>Color Scheme:</strong>
-          <label>
-            <input type="checkbox" checked="checked">
-            <span class="slider"></span>
-          </label>
-        </div>
+      <div id="buttons">
+        <button id="btn-new" type="button" class="btn-main" title="Send Mail">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+        <label id="uploader" class="btn btn-main" title="Upload Mail">
+          <i class="fa-solid fa-upload"></i>
+          <input type="file" multiple="multiple"/>
+        </label>
+        <button id="btn-random" type="button" class="btn-main" title="Randomize Mail">
+          <i class="fa-solid fa-dice"></i>
+        </button>
+        <span class="right">
+          <button id="btn-connection" type="button" class="btn-main">
+            <i class="fa-solid fa-pause"></i>
+          </button>
+          <button id="btn-color-scheme" type="button" class="btn-main">
+            <i class="fa-solid fa-sun"></i>
+          </button>
+        </span>
       </div>
 
       <select id="accounts" class="hidden"></select>
 
-      <button id="btn-new" type="button" class="btn-main">Send Mail</button>
-      <label id="uploader" class="btn btn-main">
-        <div>Upload Mail</div>
-        <input type="file" multiple="multiple"/>
-      </label>
-      <button id="btn-random" type="button" class="btn-main">Randomize Mail</button>
-      <button id="btn-mailbox-manage" type="button" class="btn-main">
-        Manage Mailbox
-        <span class="icon" />
-      </button>
-
-      <select id="mailboxes" multiple="multiple">
-      </select>
+      <div id="mailboxes">
+        <div class="control my5">
+          <input type="text" id="mailbox-name" class="full-width">
+          <span id="btn-add-folder" class="btn" title="Add main folder">
+            <i class="fa-solid fa-folder-plus"></i>
+          </span>
+          <span id="btn-add-sub-folder" class="btn" title="Add sub folder to the selected folder">
+              <i class="fa-solid fa-folder-tree"></i>
+          </span>
+        </div>
+      </div>
     </div>
 
     <div id="nav-dragbar"></div>
@@ -58,40 +60,14 @@
       <table>
         <thead>
           <tr>
-            <th class="summary">Summary</th>
-            <th class="date"><span class="ordering"></span> Date</th>
-            <th class="flags">Flags</th>
+            <th class="summary"></th>
+            <th class="date">
+              <span class="ordering fa-solid fa-sort-down"></span> Date
+            </th>
+            <th class="flags text-left"><i class="fa-solid fa-tag"></i></th>
           </tr>
         </thead>
         <tbody></tbody>
-        <tfoot>
-          <tr id="mail-row-template" class="hidden" draggable="true">
-            <td class="summary">
-              <div class="subject no-overflow"></div>
-              <table class="additional">
-                <tr>
-                  <td>From:</td>
-                  <td class="from no-overflow italic"></td>
-                </tr>
-                <tr>
-                  <td>To:</td>
-                  <td class="to no-overflow italic"></td>
-                </tr>
-              </table>
-            </td>
-            <td class="date"></td>
-            <td class="flags">
-              <div class="btn read">
-                <input type="checkbox" class="hidden">
-                <span>Read</span>
-              </div>
-              <div class="btn deleted">
-                <input type="checkbox" class="hidden">
-                <span>Deleted</span>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
       </table>
     </div>
 
@@ -123,13 +99,23 @@
         <td><input type="text" readonly="readonly"/></td>
       </tr>
       <tr id="header-button" class="buttons">
-        <td colspan="2">
-          <button id="btn-reply" type="button">Reply</button>
-          <button id="btn-html" type="button">Show HTML</button>
-          <button id="btn-plain" type="button">Show Plain</button>
-          <button id="btn-source" type="button">Show Source</button>
+        <td colspan="2" class="text-right">
+          <button id="btn-reply" type="button" title="Reply mail">
+            <i class="fa-solid fa-reply"></i>
+          </button>
+          <button id="btn-html" type="button" title="Show HTML mail">
+            <i class="fa-solid fa-file"></i>
+          </button>
+          <button id="btn-plain" type="button" title="Show plain mail">
+            <i class="fa-solid fa-file-lines"></i>
+          </button>
+          <button id="btn-source" type="button" title="Show source">
+            <i class="fa-solid fa-file-code"></i>
+          </button>
           <div id="btn-dropdown">
-            <button type="button">Attachments</button>
+            <button type="button" title="Attachments">
+              <i class="fa-solid fa-paperclip"></i>
+            </button>
             <div></div>
           </div>
         </td>
@@ -145,64 +131,54 @@
 
   <div id="editor" class="hidden popup centered">
     <div class="buttons">
-      <button id="btn-send">Send</button>
-      <button id="btn-add-header">Add Header</button>
-      <button id="btn-advanced"></button>
-      <button id="btn-cancel">Cancel</button>
+      <button id="btn-send" title="Send mail">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+      <button id="btn-advanced">
+        <i class="fa-solid fa-eye-slash"></i>
+      </button>
+      <button id="btn-cancel" title="Cancel">
+        <i class="fa-solid fa-times"></i>
+      </button>
     </div>
 
-    <table id="editor-header" class="header">
-      <tr id="editor-date">
-        <th>Date:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-      <tr id="editor-from">
-        <th>From:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-      <tr id="editor-to">
-        <th>To:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-      <tr id="editor-cc">
-        <th>CC:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-      <tr id="editor-bcc">
-        <th>BCC:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-      <tr id="editor-subject">
-        <th>Subject:</th>
-        <td><input type="text"/></td>
-        <td class="control"></td>
-      </tr>
-    </table>
-    <table class="header attachments">
-      <tr>
-        <th>Attachments:</th>
-        <td><input type="file" multiple="multiple"/></td>
-      </tr>
-    </table>
+    <div id="editor-header" class="header">
+      <table>
+        <tr class="simple">
+          <th>Date:</th>
+          <td><input id="editor-date" type="text"/></td>
+        </tr>
+        <tr class="simple">
+          <th>From:</th>
+          <td><input id="editor-from" type="text"/></td>
+        </tr>
+        <tr class="simple">
+          <th>To:</th>
+          <td><input id="editor-to" type="text"/></td>
+        </tr>
+        <tr class="simple">
+          <th>CC:</th>
+          <td><input id="editor-cc" type="text"/></td>
+        </tr>
+        <tr class="simple">
+          <th>BCC:</th>
+          <td><input id="editor-bcc" type="text"/></td>
+        </tr>
+        <tr class="simple">
+          <th>Subject:</th>
+          <td><input id="editor-subject" type="text"/></td>
+        </tr>
+      </table>
+      <textarea id="editor-advanced" class="advanced" rows="10"></textarea>
+      <div>
+        <div class="attachments">
+          <input type="file" multiple="multiple"/>
+        </div>
+      </div>
+    </div>
     <div class="container content">
       <textarea></textarea>
     </div>
-  </div>
-
-  <div id="mailbox-control" class="popup hidden">
-    <input id="mailbox-name" type="text">
-    <div class="buttons">
-      <button id="btn-add-folder">Add Folder</button>
-      <button id="btn-add-sub-folder">Add Subfolder</button>
-      <button id="btn-del-folder">Remove Selected</button>
-      <button id="btn-cancel">Close</button>
-    </div>
-
   </div>
 
   <script>
@@ -210,4 +186,32 @@
     client.initialize();
   </script>
 </body>
+
+<template id="template-mail-row">
+  <tr draggable="true">
+    <td class="summary">
+      <div class="subject no-overflow"></div>
+      <div class="from font-normal italic no-overflow"></div>
+    </td>
+    <td class="date"></td>
+    <td class="flags">
+      <span class="btn read fa-solid">
+        <input type="checkbox" class="hidden">
+      </span>
+      <span class="btn deleted fa-solid fa-trash-can">
+        <input type="checkbox" class="hidden">
+      </span>
+    </td>
+  </tr>
+</template>
+
+<template id="template-mailbox">
+  <div class="option">
+    <span class="name"></span>
+    <button class="btn-del-folder right" title="Remove this folder">
+      <i class="fa-solid fa-trash"></i>
+    </button>
+  </div>
+</template>
+
 </html>

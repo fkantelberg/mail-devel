@@ -1,3 +1,4 @@
 include src/mail_devel/resources/*.css
 include src/mail_devel/resources/*.html
 include src/mail_devel/resources/*.js
+include src/mail_devel/resources/*.woff2
