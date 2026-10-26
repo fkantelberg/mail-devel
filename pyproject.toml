@@ -106,3 +106,9 @@ version = {attr = "mail_devel.utils.VERSION"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.css", "*.html", "*.js", "*.woff2"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["Dockerfile", "noxfile.py", "openssl.cnf", "*.sh", "*.yaml"]
